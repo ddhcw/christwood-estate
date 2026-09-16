@@ -5,7 +5,7 @@
 **Project:** `projects/purchase/` (Digital MRN/PRN)
 **Category:** GAS Web Apps → also read `standards/categories/gas-messaging-posting.md`
 **Size:** small
-**Blocked on:** the open question in RFC-0001 §Open question
+**Blocked on:** nothing — RFC-0001 is Accepted
 
 ---
 
@@ -16,14 +16,15 @@ Implement the decision in RFC-0001. Nothing beyond it.
 ## Acceptance criteria
 
 1. `sendApprovalNotification(data)` exists in `NotificationService.js` and is called on submission, alongside the existing `sendSubmissionNotification`.
-2. Recipients come from `getNotificationRecipients('principal')` ∪ `getNotificationRecipients('ceo')`, deduplicated, case-insensitively.
-3. **No email address, and no person's name, appears anywhere in source.**
-4. Empty recipient list → `Logger.log` and return. No throw.
-5. `MailApp` failure → caught and logged. The purchase request still saves.
-6. `SetupSheet.js` seeds `onPrincipalEmails` and `onCEOEmails` Config rows, and re-running `setupSheets()` does not duplicate them.
-7. Config is read by header/label, never by hardcoded row index.
-8. Subject line distinguishes this from the existing submission mail.
-9. No file outside `projects/purchase/` is touched.
+2. `ConfigService.js` gains an `onAdminHeadEmails` key and an `'adminHead'` case in `getNotificationRecipients()`.
+3. Recipients come from `getNotificationRecipients('adminHead')` ∪ `getNotificationRecipients('ceo')`, deduplicated, case-insensitively.
+4. **No email address, and no person's name, appears anywhere in source.**
+5. Empty recipient list → `Logger.log` and return. No throw.
+6. `MailApp` failure → caught and logged. The purchase request still saves.
+7. `SetupSheet.js` seeds `onAdminHeadEmails` and `onCEOEmails` Config rows with role-named labels, and re-running `setupSheets()` does not duplicate them.
+8. Config is read by header/label, never by hardcoded row index.
+9. Subject line distinguishes this from the existing submission mail.
+10. No file outside `projects/purchase/` is touched.
 
 ## Subagent sequence
 
