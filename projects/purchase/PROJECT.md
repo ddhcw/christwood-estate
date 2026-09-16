@@ -37,7 +37,8 @@ Any live patch must be `clasp pull`ed back and reconciled before the next push.
 ## Config keys (Config sheet — never hardcode these)
 
 `prefix`, `yearCode`, `separator`, `nextSeqNum`, `seqPadding`,
-`onSubmissionEmails`, `onPrincipalEmails`, `onCEOEmails`, `onRejectionEmails`,
+`onSubmissionEmails`, `onPrincipalEmails`, `onAdminHeadEmails`, `onCEOEmails`,
+`onRejectionEmails`,
 `guestEmails`, `attachFolderId`, `maxFileSize`, `allowedFileTypes`,
 `schoolName`, `schoolLogoUrl`, `sigText`, `hrColName`, `hrColDept`, `hrColEmail`
 
@@ -45,10 +46,17 @@ Any live patch must be `clasp pull`ed back and reconciled before the next push.
 
 - **`onPrincipalEmails`, `onCEOEmails` and `onRejectionEmails` are read by
   `getNotificationRecipients()` but nothing calls those stages.** Three of the
-  four notification paths were built and never wired up. TICKET-0001 wires two
-  of them. Don't assume a configured address means mail is being sent.
+  four notification paths were built and never wired up. TICKET-0001 wires the CEO stage and adds a new Admin Head stage. Don't assume a configured address means mail is being sent.
 - `hrColName` / `hrColDept` / `hrColEmail` are **column letters** in the
   `ImportHR` sheet, held in Config. They exist because the HR import's column
   order is not ours to control — but they are still positional. Treat them as a
   known deviation from non-negotiable #2, not a pattern to copy.
 - `nextSeqNumRow: -1` is a sentinel meaning "not yet located".
+
+## Who is who
+
+- **Principal** — academic head. `onPrincipalEmails`. Currently unwired.
+- **Admin Head** — Sharon Paul, HR Head by designation, non-academic head of the
+  school, reports directly to the CEO. `onAdminHeadEmails`. Purchase approvals
+  route to her, **not** to the Principal. Do not conflate the two keys.
+- **CEO** — `onCEOEmails`.
