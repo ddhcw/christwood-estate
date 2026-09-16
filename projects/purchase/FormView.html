@@ -1,0 +1,146 @@
+<!-- ═══════════════════════════════════════════════════════════════
+     CHRISTWOOD PURCHASE REQUEST SYSTEM — Form View
+     ═══════════════════════════════════════════════════════════════
+     The purchase request submission form with dynamic items,
+     file upload, and real-time validation.
+     ═══════════════════════════════════════════════════════════════ -->
+<div id="view-form" class="view-container">
+  <!-- Pre-filled User Info Bar -->
+  <div class="info-bar" id="user-info-bar">
+    <div class="info-bar-item">
+      <div class="info-bar-label">Staff Name</div>
+      <div class="info-bar-value" id="info-staff-name">—</div>
+    </div>
+    <div class="info-bar-item">
+      <div class="info-bar-label">Department</div>
+      <div class="info-bar-value" id="info-department">—</div>
+    </div>
+    <div class="info-bar-item">
+      <div class="info-bar-label">Email</div>
+      <div class="info-bar-value" id="info-email">—</div>
+    </div>
+    <div class="info-bar-item">
+      <div class="info-bar-label">Date</div>
+      <div class="info-bar-value" id="info-date">—</div>
+    </div>
+  </div>
+  <!-- Main Form Card -->
+  <form id="purchase-form" autocomplete="off">
+    <div class="card">
+      <div class="card-header">
+        <h2>📝 Purchase Request</h2>
+        <span class="badge badge-submitted" style="font-size:0.7rem;">New Request</span>
+      </div>
+      <div class="card-body">
+        <!-- ── Items Section ── -->
+        <div class="form-group">
+          <div class="flex-between mb-md">
+            <label class="form-label" style="margin-bottom:0;">Items Required <span class="required">*</span></label>
+            <button type="button" class="btn btn-outline btn-sm" id="btn-add-item" onclick="PRS.addItemRow()">
+              ＋ Add Item
+            </button>
+          </div>
+          <div class="items-table-wrapper">
+            <table class="items-table" id="items-table">
+              <thead>
+                <tr>
+                  <th style="width:50px;text-align:center;">#</th>
+                  <th class="col-description">Item Description</th>
+                  <th class="col-quantity">Quantity</th>
+                  <th class="col-unit">Unit</th>
+                  <th class="col-cost">Cost / Unit (₹)</th>
+                  <th class="col-total">Total (₹)</th>
+                  <th style="width:44px;text-align:center;"></th>
+                </tr>
+              </thead>
+              <tbody id="items-tbody">
+                <!-- Rows added dynamically by ClientScripts -->
+              </tbody>
+            </table>
+          </div>
+          <div class="items-grand-total">
+            <span class="items-grand-total-label">Grand Total</span>
+            <span class="items-grand-total-value" id="grand-total">₹0.00</span>
+          </div>
+        </div>
+        <!-- ── Purpose ── -->
+        <div class="form-group" id="group-purpose">
+          <label class="form-label" for="field-purpose">Purpose <span class="required">*</span></label>
+          <textarea
+            id="field-purpose"
+            class="form-textarea"
+            placeholder="Describe the purpose for this purchase request…"
+            rows="3"
+            maxlength="1000"
+          ></textarea>
+          <div class="form-hint"><span id="purpose-charcount">0</span> / 1000 characters</div>
+          <div class="form-error" id="error-purpose"></div>
+        </div>
+        <!-- ── Stock in Hand ── -->
+        <div class="form-group" id="group-stock">
+          <label class="form-label" for="field-stock">Stock in Hand <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">(if applicable)</span></label>
+          <textarea
+            id="field-stock"
+            class="form-textarea"
+            placeholder="Current stock available, if any…"
+            rows="2"
+            maxlength="500"
+          ></textarea>
+          <div class="form-error" id="error-stock"></div>
+        </div>
+        <!-- ── Additional Notes ── -->
+        <div class="form-group" id="group-notes">
+          <label class="form-label" for="field-notes">Additional Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">(optional)</span></label>
+          <textarea
+            id="field-notes"
+            class="form-textarea"
+            placeholder="Any other information relevant to this request…"
+            rows="2"
+            maxlength="500"
+          ></textarea>
+        </div>
+        <!-- ── File Attachments ── -->
+        <div class="form-group" id="group-attachments">
+          <label class="form-label">Attachments <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">(optional — quotations, images, supporting documents)</span></label>
+          <div class="file-upload-zone" id="file-drop-zone">
+            <div class="upload-icon">📎</div>
+            <div class="upload-text">Drag & drop files here, or <strong>click to browse</strong></div>
+            <div class="upload-hint" id="file-type-hint">Accepted: PDF, JPG, PNG — Max 10 MB each</div>
+            <input type="file" id="file-input" multiple accept=".pdf,.jpg,.jpeg,.png" style="display:none;">
+          </div>
+          <div class="file-list" id="file-list">
+            <!-- Files shown dynamically -->
+          </div>
+        </div>
+      </div>
+      <!-- ── Submit Footer ── -->
+      <div class="card-footer">
+        <button type="button" class="btn btn-outline" onclick="PRS.resetForm()">
+          Clear Form
+        </button>
+        <button type="submit" class="btn btn-accent btn-lg" id="btn-submit">
+          Submit Request →
+        </button>
+      </div>
+    </div>
+  </form>
+  <!-- ── Success State (hidden by default) ── -->
+  <div id="form-success" class="card hidden">
+    <div class="card-body">
+      <div class="success-container">
+        <div class="success-icon">✓</div>
+        <h2>Request Submitted Successfully</h2>
+        <div class="success-id" id="success-request-id"></div>
+        <p class="text-muted mt-md">Your purchase request has been recorded and the relevant departments have been notified.</p>
+        <div class="mt-xl" style="display:flex;gap:var(--space-md);justify-content:center;flex-wrap:wrap;">
+          <button type="button" class="btn btn-outline" onclick="PRS.viewSubmittedRequest()">
+            👁 View Request
+          </button>
+          <button type="button" class="btn btn-accent" onclick="PRS.startNewRequest()">
+            ＋ New Request
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Purchase Request — Christwood</title>
+  <meta name="description" content="Christwood Digital Purchase Request System — Submit, track, and manage purchase requests.">
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <!-- Styles -->
+  <?!= include('Styles') ?>
+</head>
+<body>
+  <!-- ═══════════════════════════════════════════════════════
+       APP HEADER
+       ═══════════════════════════════════════════════════════ -->
+  <header class="app-header">
+    <div class="app-header-inner">
+      <div class="app-brand">
+        <div class="app-brand-icon">🛒</div>
+        <div class="app-brand-text">
+          <span class="app-brand-name">Christwood</span>
+          <span class="app-brand-subtitle">Purchase Request System</span>
+        </div>
+      </div>
+      <div class="app-user">
+        <span class="app-user-email" id="user-email-display"></span>
+        <div class="app-user-avatar" id="user-avatar"></div>
+      </div>
+    </div>
+  </header>
+  <!-- ═══════════════════════════════════════════════════════
+       NAVIGATION
+       ═══════════════════════════════════════════════════════ -->
+  <nav class="app-nav no-print">
+    <div class="app-nav-inner">
+      <button class="nav-tab active" data-page="form" onclick="PRS.navigateTo('form')">
+        ＋ New Request
+      </button>
+      <button class="nav-tab" data-page="dashboard" id="nav-dashboard" onclick="PRS.navigateTo('dashboard')">
+        📋 Requests
+      </button>
+    </div>
+  </nav>
+  <!-- ═══════════════════════════════════════════════════════
+       MAIN CONTENT AREA
+       ═══════════════════════════════════════════════════════ -->
+  <main class="app-main">
+    <!-- Form View -->
+    <?!= include('FormView') ?>
+    <!-- Dashboard View -->
+    <?!= include('DashboardView') ?>
+    <!-- Print View -->
+    <?!= include('PrintView') ?>
+  </main>
+  <!-- ═══════════════════════════════════════════════════════
+       CLIENT SCRIPTS
+       ═══════════════════════════════════════════════════════ -->
+  <?!= include('ClientScripts') ?>
+  <!-- Initialise the app -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      PRS.init('<?= page ?>', '<?= requestId ?>');
+    });
+  </script>
+</body>
+</html>

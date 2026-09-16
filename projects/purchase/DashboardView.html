@@ -1,0 +1,98 @@
+<!-- ═══════════════════════════════════════════════════════════════
+     CHRISTWOOD PURCHASE REQUEST SYSTEM — Dashboard View
+     ═══════════════════════════════════════════════════════════════
+     Lists submitted purchase requests with filtering, search,
+     and a detail drawer for viewing individual requests.
+     ═══════════════════════════════════════════════════════════════ -->
+<div id="view-dashboard" class="view-container">
+  <!-- Page Header -->
+  <div class="flex-between mb-lg">
+    <h2 id="dashboard-title">📋 My Requests</h2>
+    <button type="button" class="btn btn-outline btn-sm no-print" onclick="PRS.refreshDashboard()">
+      ↻ Refresh
+    </button>
+  </div>
+  <!-- Filters Bar -->
+  <div class="filters-bar no-print" id="dashboard-filters">
+    <input
+      type="text"
+      class="filter-input"
+      id="filter-search"
+      placeholder="Search by Request ID, name, or purpose…"
+      oninput="PRS.applyFilters()"
+    >
+    <select class="filter-select" id="filter-status" onchange="PRS.applyFilters()">
+      <option value="">All Status</option>
+      <option value="Submitted">Submitted</option>
+      <option value="Approved">Approved</option>
+      <option value="Rejected">Rejected</option>
+    </select>
+    <select class="filter-select" id="filter-department" onchange="PRS.applyFilters()" style="display:none;">
+      <option value="">All Departments</option>
+    </select>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <label style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">From:</label>
+      <input type="date" class="filter-input" id="filter-date-from" onchange="PRS.applyFilters()" style="min-width:130px;">
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <label style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">To:</label>
+      <input type="date" class="filter-input" id="filter-date-to" onchange="PRS.applyFilters()" style="min-width:130px;">
+    </div>
+  </div>
+  <!-- Results Count -->
+  <div class="flex-between mb-md">
+    <span class="text-muted" style="font-size:0.82rem;" id="results-count"></span>
+    <span class="text-muted" style="font-size:0.78rem;" id="results-role-info"></span>
+  </div>
+  <!-- Request List -->
+  <div class="request-list" id="request-list">
+    <!-- Cards populated dynamically -->
+  </div>
+  <!-- Empty State -->
+  <div class="empty-state hidden" id="dashboard-empty">
+    <div class="empty-state-icon">📭</div>
+    <div class="empty-state-title">No Requests Found</div>
+    <div class="empty-state-text" id="empty-state-text">
+      No purchase requests match your criteria. Try adjusting your filters or submit a new request.
+    </div>
+  </div>
+  <!-- Load More -->
+  <div class="text-center mt-xl hidden" id="load-more-wrapper">
+    <button type="button" class="btn btn-outline" id="btn-load-more" onclick="PRS.loadMoreRequests()">
+      Load More
+    </button>
+  </div>
+  <!-- Loading State for Dashboard -->
+  <div class="text-center mt-xl hidden" id="dashboard-loading">
+    <div class="spinner spinner-sm" style="display:inline-block;"></div>
+    <span class="text-muted" style="font-size:0.85rem;margin-left:8px;">Loading requests…</span>
+  </div>
+</div>
+<!-- ═══════════════════════════════════════════════════════════════
+     DETAIL DRAWER — slides in from the right when a request
+     card is clicked. Shows full request info with print option.
+     ═══════════════════════════════════════════════════════════════ -->
+<div id="detail-drawer-backdrop" class="detail-drawer-backdrop hidden" onclick="PRS.closeDrawer()"></div>
+<div id="detail-drawer" class="detail-drawer hidden">
+  <div class="drawer-header">
+    <div>
+      <h3 id="drawer-request-id" style="font-family:var(--font-mono);"></h3>
+      <span class="badge" id="drawer-status-badge"></span>
+    </div>
+    <button type="button" class="btn-icon" onclick="PRS.closeDrawer()" title="Close" aria-label="Close drawer">
+      ✕
+    </button>
+  </div>
+  <div class="drawer-body" id="drawer-body">
+    <!-- Populated dynamically -->
+  </div>
+  <div class="drawer-footer no-print">
+    <button type="button" class="btn btn-outline btn-sm" onclick="PRS.closeDrawer()">Close</button>
+    <button type="button" class="btn btn-outline btn-sm hidden" id="btn-clone-request" onclick="PRS.cloneRequest()">
+      📋 Clone & Resubmit
+    </button>
+    <button type="button" class="btn btn-primary btn-sm hidden" id="btn-print-request" onclick="PRS.printRequest()">
+      🖨 Print
+    </button>
+  </div>
+</div>

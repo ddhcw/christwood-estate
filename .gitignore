@@ -1,0 +1,10 @@
+.DS_Store
+.clasprc.json
+*.csv
+*.xlsx
+*.tsv
+node_modules/
+.env
+.env.*
+*credentials*.json
+*service-account*.json

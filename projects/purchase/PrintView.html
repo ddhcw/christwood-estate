@@ -1,0 +1,149 @@
+<!-- ═══════════════════════════════════════════════════════════════
+     CHRISTWOOD PURCHASE REQUEST SYSTEM — Print View
+     ═══════════════════════════════════════════════════════════════
+     Printer-friendly purchase request layout matching the original
+     paper form, with modernised typography and the digital
+     signature block.
+     ═══════════════════════════════════════════════════════════════ -->
+
+<div id="view-print" class="view-container">
+  <!-- Print controls (hidden on print) -->
+  <div class="flex-between mb-lg no-print">
+    <button type="button" class="btn btn-outline btn-sm" onclick="PRS.navigateTo('dashboard')">
+      ← Back to Requests
+    </button>
+    <button type="button" class="btn btn-primary btn-sm" onclick="window.print()">
+      🖨 Print This Page
+    </button>
+  </div>
+
+  <!-- Print Content -->
+  <div id="print-content" class="card" style="max-width:800px;margin:0 auto;">
+    <div class="card-body" style="padding:28px 32px;">
+
+      <!-- ── School Header ── -->
+      <div style="text-align:center;margin-bottom:20px;border-bottom:2px solid var(--primary);padding-bottom:14px;">
+        <img id="print-school-logo" src="" alt="School Logo" style="max-height:80px; margin-bottom: 8px; display: none;">
+        <h1 id="print-school-name" style="font-size:1.6rem;letter-spacing:2px;color:var(--primary);margin-bottom:4px;text-transform:uppercase;">
+          CHRISTWOOD
+        </h1>
+        <p style="font-size:0.8rem;color:var(--text-muted);letter-spacing:4px;text-transform:uppercase;margin:0;">
+          Purchase Request Form
+        </p>
+      </div>
+
+      <!-- ── Request ID & Date Row ── -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;">
+        <div>
+          <span style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Request No.</span>
+          <div id="print-request-id" style="font-family:var(--font-mono);font-size:1.15rem;font-weight:700;color:var(--primary);margin-top:2px;">—</div>
+        </div>
+        <div style="text-align:right;">
+          <span style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Date</span>
+          <div id="print-date" style="font-size:1rem;font-weight:600;color:var(--text);margin-top:2px;">—</div>
+        </div>
+      </div>
+
+      <!-- ── Staff Details ── -->
+      <div style="margin-bottom:18px;padding:10px 16px;background:var(--bg);border-radius:var(--radius-md);border:1px solid var(--border);">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td style="padding:6px 0;font-size:0.78rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;width:140px;vertical-align:top;">Name of Staff</td>
+            <td style="padding:6px 0;font-size:0.95rem;color:var(--text);font-weight:600;" id="print-staff-name">—</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;font-size:0.78rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;vertical-align:top;">Department</td>
+            <td style="padding:6px 0;font-size:0.95rem;color:var(--text);font-weight:500;" id="print-department">—</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;font-size:0.78rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;vertical-align:top;">Email</td>
+            <td style="padding:6px 0;font-size:0.88rem;color:var(--text-secondary);" id="print-email">—</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- ── Items Table ── -->
+      <div style="margin-bottom:16px;">
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;">Items Required</div>
+        <table style="width:100%;border-collapse:collapse;border:1px solid var(--border);" id="print-items-table">
+          <thead>
+            <tr style="background:var(--primary);">
+              <th style="padding:6px 8px;text-align:center;font-size:0.68rem;color:white;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--primary-light);width:32px;">#</th>
+              <th style="padding:6px 8px;text-align:left;font-size:0.68rem;color:white;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--primary-light);">Item Description</th>
+              <th style="padding:6px 8px;text-align:center;font-size:0.68rem;color:white;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--primary-light);width:60px;">Qty</th>
+              <th style="padding:6px 8px;text-align:center;font-size:0.68rem;color:white;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--primary-light);width:55px;">Unit</th>
+              <th style="padding:6px 8px;text-align:right;font-size:0.68rem;color:white;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--primary-light);width:90px;">Rate (₹)</th>
+              <th style="padding:6px 8px;text-align:right;font-size:0.68rem;color:white;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--primary-light);width:90px;">Total (₹)</th>
+            </tr>
+          </thead>
+          <tbody id="print-items-tbody">
+            <!-- Populated dynamically -->
+          </tbody>
+          <tfoot>
+            <tr style="background:var(--accent-bg);border-top:2px solid var(--accent);">
+              <td colspan="5" style="padding:8px;text-align:right;font-weight:700;font-size:0.85rem;color:var(--primary);border:1px solid var(--border);">Grand Total</td>
+              <td style="padding:8px;text-align:right;font-weight:700;font-size:0.95rem;color:var(--accent-dark);border:1px solid var(--border);" id="print-grand-total">₹0.00</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <!-- ── Purpose ── -->
+      <div style="margin-bottom:14px;">
+        <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:4px;">Purpose</div>
+        <div id="print-purpose" style="font-size:0.85rem;color:var(--text);line-height:1.5;padding:6px 10px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border);min-height:28px;">—</div>
+      </div>
+
+      <!-- ── Stock in Hand ── -->
+      <div style="margin-bottom:14px;" id="print-stock-section">
+        <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:4px;">Stock in Hand</div>
+        <div id="print-stock" style="font-size:0.85rem;color:var(--text);line-height:1.5;padding:6px 10px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border);min-height:28px;">—</div>
+      </div>
+
+      <!-- ── Attachments ── -->
+      <div style="margin-bottom:16px;" id="print-attachments-section" class="hidden">
+        <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:4px;">Attachments</div>
+        <div id="print-attachments" style="font-size:0.8rem;color:var(--text-secondary);"></div>
+      </div>
+
+      <!-- ── Digital Signature Block ── -->
+      <div style="margin:18px 0;padding:10px 16px;background:linear-gradient(135deg,#f8f4ee,#fdf6ef);border-radius:var(--radius-md);border:1px solid #e0d8c0;">
+        <div id="print-digital-signature" style="font-size:0.78rem;color:var(--text-secondary);line-height:1.5;font-style:italic;">—</div>
+      </div>
+
+      <!-- ── Available Budget (handwritten by Finance) ── -->
+      <div style="margin-top:28px;margin-bottom:20px;">
+        <div style="display:flex;align-items:flex-end;gap:12px;">
+          <span style="font-size:0.82rem;font-weight:600;color:var(--text);white-space:nowrap;">Available Budget:</span>
+          <span style="flex:1;border-bottom:1px solid var(--border);min-height:22px;"></span>
+        </div>
+      </div>
+
+      <!-- ── Physical Signature Lines ── -->
+      <div style="margin-top:28px;">
+        <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:18px;">Signatures</div>
+
+        <div style="display:flex;flex-direction:column;gap:28px;">
+          <!-- Principal -->
+          <div style="display:flex;align-items:flex-end;gap:12px;">
+            <span style="font-size:0.82rem;font-weight:600;color:var(--text);width:90px;">Principal</span>
+            <span style="flex:1;border-bottom:1px solid var(--border);min-height:22px;"></span>
+          </div>
+
+          <!-- CEO -->
+          <div style="display:flex;align-items:flex-end;gap:12px;">
+            <span style="font-size:0.82rem;font-weight:600;color:var(--text);width:90px;">CEO</span>
+            <span style="flex:1;border-bottom:1px solid var(--border);min-height:22px;"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Notes ── -->
+      <div style="margin-top:20px;" id="print-notes-section" class="hidden">
+        <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:4px;">Additional Notes</div>
+        <div id="print-notes" style="font-size:0.8rem;color:var(--text-secondary);line-height:1.4;">—</div>
+      </div>
+
+    </div>
+  </div>
+</div>

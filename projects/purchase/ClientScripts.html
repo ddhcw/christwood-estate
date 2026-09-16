@@ -1,0 +1,1371 @@
+<script>
+/**
+ * ═══════════════════════════════════════════════════════════════
+ * CHRISTWOOD PURCHASE REQUEST SYSTEM — Client Scripts
+ * ═══════════════════════════════════════════════════════════════
+ * SPA routing, form management, dashboard, file uploads,
+ * validation, and all client-side logic.
+ * ═══════════════════════════════════════════════════════════════
+ */
+
+var PRS = (function() {
+
+  // ─── State ────────────────────────────────────────────
+  var state = {
+    email: '',
+    userInfo: null,
+    isValid: false,
+    isGuest: false,
+    viewerRole: null,
+    config: {},
+    currentView: 'form',
+    itemCounter: 0,
+    attachments: [],
+    dashRequests: [],
+    dashAllRequests: [],
+    dashOffset: 0,
+    dashCanPrint: false,
+    lastSubmittedId: '',
+    currentDetailRequest: null,
+    draftKey: 'prs_draft_v1'
+  };
+
+  var UNITS = ['Nos', 'Sets', 'Packs', 'Boxes', 'Reams', 'Kg', 'Litres', 'Metres', 'Rolls', 'Bottles', 'Pairs', 'Dozen', 'Bundles', 'Other'];
+
+  // ─── Initialisation ──────────────────────────────────
+
+  function init(initialPage, initialRequestId) {
+    showLoading('Connecting…');
+
+    google.script.run
+      .withSuccessHandler(function(data) {
+        hideLoading();
+        handleInitData(data, initialPage, initialRequestId);
+      })
+      .withFailureHandler(function(err) {
+        hideLoading();
+        showToast('Failed to load: ' + err.message, 'error');
+      })
+      .getInitialData();
+  }
+
+  function handleInitData(data, initialPage, initialRequestId) {
+    if (!data) {
+      showUnauthorised('Unable to connect to the system. Please try again.');
+      return;
+    }
+
+    // Handle external users needing manual email entry
+    if (data.requiresManualEmail) {
+      showGuestLogin();
+      return;
+    }
+
+    if (!data.isValid) {
+      showUnauthorised('Your email (' + (data.email || 'unknown') + ') is not authorised to use this system. Please contact your administrator.');
+      return;
+    }
+
+    // Store state
+    state.email = data.email;
+    state.userInfo = data.userInfo;
+    state.isValid = data.isValid;
+    state.isGuest = data.isGuest;
+    state.viewerRole = data.viewerRole;
+    state.config = data.config || {};
+
+    // Populate UI
+    populateUserInfo();
+    setupNavigation();
+    setupForm();
+
+    // Determine initial page
+    var page = initialPage || 'form';
+    if (initialRequestId && page === 'print') {
+      navigateTo('print');
+      loadPrintView(initialRequestId);
+    } else {
+      navigateTo(page);
+    }
+  }
+
+  // ─── User Info ────────────────────────────────────────
+
+  function populateUserInfo() {
+    var info = state.userInfo;
+    if (!info) return;
+
+    setText('info-staff-name', info.name);
+    setText('info-department', info.department);
+    setText('info-email', state.email);
+    setText('info-date', formatDateDisplay(new Date()));
+
+    // Header avatar
+    var avatar = document.getElementById('user-avatar');
+    if (avatar) {
+      avatar.textContent = (info.name || 'U').charAt(0).toUpperCase();
+    }
+    var userEmail = document.getElementById('user-email-display');
+    if (userEmail) {
+      userEmail.textContent = state.email;
+    }
+  }
+
+  // ─── Navigation ───────────────────────────────────────
+
+  function setupNavigation() {
+    var navTabs = document.querySelectorAll('.nav-tab');
+    // Show/hide appropriate tabs based on role
+    var dashTab = document.getElementById('nav-dashboard');
+    if (dashTab) {
+      // Everyone can see dashboard (their own requests)
+      dashTab.style.display = '';
+    }
+
+    // Show department filter if viewer has access to all requests
+    if (state.viewerRole) {
+      var deptFilter = document.getElementById('filter-department');
+      if (deptFilter) deptFilter.style.display = '';
+    }
+  }
+
+  function navigateTo(page) {
+    state.currentView = page;
+
+    // Update nav tabs
+    var tabs = document.querySelectorAll('.nav-tab');
+    tabs.forEach(function(tab) {
+      tab.classList.toggle('active', tab.dataset.page === page);
+    });
+
+    // Show/hide views
+    var views = document.querySelectorAll('.view-container');
+    views.forEach(function(v) {
+      v.classList.toggle('active', v.id === 'view-' + page);
+    });
+
+    // Load data for views
+    if (page === 'dashboard') {
+      loadDashboard();
+    }
+  }
+
+  // ─── Form Management ─────────────────────────────────
+
+  function setupForm() {
+    // Add initial item row
+    addItemRow();
+
+    // Set up purpose character counter
+    var purpose = document.getElementById('field-purpose');
+    if (purpose) {
+      purpose.addEventListener('input', function() {
+        setText('purpose-charcount', this.value.length);
+      });
+    }
+
+    // Set up file upload
+    setupFileUpload();
+
+    // Set up form submission
+    var form = document.getElementById('purchase-form');
+    if (form) {
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        handleSubmit();
+      });
+    }
+
+    // Restore draft if available
+    restoreDraft();
+
+    // Auto-save draft on input
+    document.addEventListener('input', function(e) {
+      if (e.target.closest('#purchase-form')) {
+        saveDraft();
+      }
+    });
+
+    // Update file type hint from config
+    if (state.config.allowedFileTypes) {
+      var hint = document.getElementById('file-type-hint');
+      if (hint) {
+        var types = state.config.allowedFileTypes.split(',').map(function(t) { return t.trim().toUpperCase(); }).join(', ');
+        hint.textContent = 'Accepted: ' + types + ' — Max ' + (state.config.maxFileSize || 10) + ' MB each';
+      }
+    }
+  }
+
+  function addItemRow() {
+    state.itemCounter++;
+    var idx = state.itemCounter;
+    var tbody = document.getElementById('items-tbody');
+    if (!tbody) return;
+
+    var unitOptions = UNITS.map(function(u) {
+      return '<option value="' + u + '">' + u + '</option>';
+    }).join('');
+
+    var row = document.createElement('tr');
+    row.id = 'item-row-' + idx;
+    row.dataset.idx = idx;
+    row.innerHTML =
+      '<td class="item-num">' + getVisibleRowNumber() + '</td>' +
+      '<td class="col-description">' +
+        '<input type="text" class="item-input" placeholder="Describe the item…" data-field="description" data-idx="' + idx + '" required>' +
+      '</td>' +
+      '<td class="col-quantity">' +
+        '<input type="number" class="item-input numeric" placeholder="0" min="0" step="any" data-field="quantity" data-idx="' + idx + '" required>' +
+      '</td>' +
+      '<td class="col-unit">' +
+        '<select class="item-input" data-field="unit" data-idx="' + idx + '">' +
+          '<option value="">—</option>' +
+          unitOptions +
+        '</select>' +
+      '</td>' +
+      '<td class="col-cost">' +
+        '<input type="number" class="item-input numeric" placeholder="0.00" min="0" step="0.01" data-field="costPerUnit" data-idx="' + idx + '">' +
+      '</td>' +
+      '<td class="col-total">' +
+        '<div class="row-total" id="row-total-' + idx + '">₹0.00</div>' +
+      '</td>' +
+      '<td class="col-actions">' +
+        '<button type="button" class="btn-icon danger" onclick="PRS.removeItemRow(' + idx + ')" title="Remove item" aria-label="Remove item">✕</button>' +
+      '</td>';
+
+    tbody.appendChild(row);
+
+    // Bind input events for cost calculation
+    var inputs = row.querySelectorAll('input[data-field="quantity"], input[data-field="costPerUnit"]');
+    inputs.forEach(function(input) {
+      input.addEventListener('input', function() {
+        calculateRowTotal(idx);
+        calculateGrandTotal();
+      });
+    });
+
+    // Focus description field
+    var descInput = row.querySelector('input[data-field="description"]');
+    if (descInput && state.itemCounter > 1) {
+      descInput.focus();
+    }
+
+    updateRemoveButtons();
+  }
+
+  function removeItemRow(idx) {
+    var row = document.getElementById('item-row-' + idx);
+    if (row) {
+      row.remove();
+      renumberItems();
+      calculateGrandTotal();
+      updateRemoveButtons();
+    }
+  }
+
+  function renumberItems() {
+    var rows = document.querySelectorAll('#items-tbody tr');
+    rows.forEach(function(row, i) {
+      var numCell = row.querySelector('.item-num');
+      if (numCell) numCell.textContent = i + 1;
+    });
+  }
+
+  function updateRemoveButtons() {
+    var rows = document.querySelectorAll('#items-tbody tr');
+    var buttons = document.querySelectorAll('#items-tbody .btn-icon');
+    buttons.forEach(function(btn) {
+      btn.disabled = rows.length <= 1;
+      btn.style.opacity = rows.length <= 1 ? '0.3' : '1';
+    });
+  }
+
+  function getVisibleRowNumber() {
+    var rows = document.querySelectorAll('#items-tbody tr');
+    return rows.length + 1;
+  }
+
+  function calculateRowTotal(idx) {
+    var qty = parseFloat(getItemFieldValue(idx, 'quantity')) || 0;
+    var cost = parseFloat(getItemFieldValue(idx, 'costPerUnit')) || 0;
+    var total = qty * cost;
+    var el = document.getElementById('row-total-' + idx);
+    if (el) el.textContent = '₹' + formatCurrencyClient(total);
+  }
+
+  function calculateGrandTotal() {
+    var rows = document.querySelectorAll('#items-tbody tr');
+    var total = 0;
+
+    rows.forEach(function(row) {
+      var idx = row.dataset.idx;
+      var qty = parseFloat(getItemFieldValue(idx, 'quantity')) || 0;
+      var cost = parseFloat(getItemFieldValue(idx, 'costPerUnit')) || 0;
+      total += qty * cost;
+    });
+
+    var el = document.getElementById('grand-total');
+    if (el) el.textContent = '₹' + formatCurrencyClient(total);
+  }
+
+  function getItemFieldValue(idx, field) {
+    var input = document.querySelector('[data-field="' + field + '"][data-idx="' + idx + '"]');
+    return input ? input.value : '';
+  }
+
+  // ─── File Upload ──────────────────────────────────────
+
+  function setupFileUpload() {
+    var zone = document.getElementById('file-drop-zone');
+    var input = document.getElementById('file-input');
+    if (!zone || !input) return;
+
+    zone.addEventListener('click', function() { input.click(); });
+
+    zone.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      zone.classList.add('drag-over');
+    });
+
+    zone.addEventListener('dragleave', function() {
+      zone.classList.remove('drag-over');
+    });
+
+    zone.addEventListener('drop', function(e) {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      handleFiles(e.dataTransfer.files);
+    });
+
+    input.addEventListener('change', function() {
+      handleFiles(this.files);
+      this.value = ''; // Reset so same file can be selected again
+    });
+  }
+
+  function handleFiles(fileList) {
+    var maxSize = (state.config.maxFileSize || 10) * 1024 * 1024;
+    var allowedTypes = (state.config.allowedFileTypes || 'pdf,jpg,jpeg,png')
+      .split(',').map(function(t) { return t.trim().toLowerCase(); });
+
+    for (var i = 0; i < fileList.length; i++) {
+      var file = fileList[i];
+      var ext = file.name.split('.').pop().toLowerCase();
+
+      if (allowedTypes.indexOf(ext) === -1) {
+        showToast('File "' + file.name + '" is not a supported format (' + allowedTypes.join(', ') + ').', 'error');
+        continue;
+      }
+
+      if (file.size > maxSize) {
+        showToast('File "' + file.name + '" exceeds the ' + (state.config.maxFileSize || 10) + ' MB limit.', 'error');
+        continue;
+      }
+
+      // Read as base64
+      readFileAsBase64(file);
+    }
+  }
+
+  function readFileAsBase64(file) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var base64 = e.target.result.split(',')[1]; // Remove data:... prefix
+      state.attachments.push({
+        name: file.name,
+        mimeType: file.type,
+        size: file.size,
+        data: base64
+      });
+      renderFileList();
+    };
+    reader.onerror = function() {
+      showToast('Failed to read file "' + file.name + '".', 'error');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function renderFileList() {
+    var container = document.getElementById('file-list');
+    if (!container) return;
+
+    if (state.attachments.length === 0) {
+      container.innerHTML = '';
+      return;
+    }
+
+    var html = '';
+    state.attachments.forEach(function(att, i) {
+      var icon = att.name.toLowerCase().endsWith('.pdf') ? '📄' : '🖼';
+      html +=
+        '<div class="file-item" id="file-item-' + i + '">' +
+          '<span>' + icon + '</span>' +
+          '<span class="file-name">' + escapeHtmlClient(att.name) + '</span>' +
+          '<span class="file-size">' + formatFileSize(att.size) + '</span>' +
+          '<button type="button" class="btn-icon danger" onclick="PRS.removeFile(' + i + ')" title="Remove file">✕</button>' +
+        '</div>';
+    });
+
+    container.innerHTML = html;
+  }
+
+  function removeFile(index) {
+    state.attachments.splice(index, 1);
+    renderFileList();
+  }
+
+  // ─── Form Validation ─────────────────────────────────
+
+  function validateForm() {
+    var errors = [];
+    clearFormErrors();
+
+    // Validate items
+    var rows = document.querySelectorAll('#items-tbody tr');
+    if (rows.length === 0) {
+      errors.push('Please add at least one item.');
+    }
+
+    rows.forEach(function(row, i) {
+      var idx = row.dataset.idx;
+      var desc = getItemFieldValue(idx, 'description').trim();
+      var qty = getItemFieldValue(idx, 'quantity');
+
+      if (!desc || desc.length < 3) {
+        errors.push('Item ' + (i + 1) + ': Description must be at least 3 characters.');
+      }
+      if (!qty || isNaN(parseFloat(qty)) || parseFloat(qty) <= 0) {
+        errors.push('Item ' + (i + 1) + ': Quantity must be a positive number.');
+      }
+    });
+
+    // Validate purpose
+    var purpose = document.getElementById('field-purpose');
+    if (!purpose || purpose.value.trim().length < 5) {
+      errors.push('Purpose must be at least 5 characters long.');
+      setFieldError('group-purpose', 'error-purpose', 'Purpose must be at least 5 characters long.');
+    }
+
+    if (errors.length > 0) {
+      showToast(errors[0], 'error');
+      return false;
+    }
+
+    return true;
+  }
+
+  function setFieldError(groupId, errorId, message) {
+    var group = document.getElementById(groupId);
+    var error = document.getElementById(errorId);
+    if (group) group.classList.add('has-error');
+    if (error) error.textContent = message;
+  }
+
+  function clearFormErrors() {
+    var groups = document.querySelectorAll('.form-group.has-error');
+    groups.forEach(function(g) { g.classList.remove('has-error'); });
+  }
+
+  // ─── Form Submission ─────────────────────────────────
+
+  function handleSubmit() {
+    if (!validateForm()) return;
+
+    // Collect items
+    var items = [];
+    var rows = document.querySelectorAll('#items-tbody tr');
+    rows.forEach(function(row) {
+      var idx = row.dataset.idx;
+      items.push({
+        description: getItemFieldValue(idx, 'description').trim(),
+        quantity: getItemFieldValue(idx, 'quantity'),
+        unit: getItemFieldValue(idx, 'unit'),
+        costPerUnit: getItemFieldValue(idx, 'costPerUnit') || '0'
+      });
+    });
+
+    var formData = {
+      items: items,
+      purpose: document.getElementById('field-purpose').value.trim(),
+      stockInHand: document.getElementById('field-stock').value.trim(),
+      notes: document.getElementById('field-notes').value.trim(),
+      attachments: state.attachments.map(function(a) {
+        return { name: a.name, mimeType: a.mimeType, data: a.data };
+      })
+    };
+
+    // If guest, pass email
+    if (state.isGuest) {
+      formData.guestEmail = state.email;
+    }
+
+    showConfirmDialog(
+      'Submit Purchase Request?',
+      'This will submit your purchase request with ' + items.length + ' item' + (items.length > 1 ? 's' : '') +
+        ' for review. An email notification will be sent to the relevant departments.',
+      function() { submitForm(formData); }
+    );
+  }
+
+  function submitForm(formData) {
+    var btn = document.getElementById('btn-submit');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner spinner-sm"></span> Submitting…';
+    }
+
+    google.script.run
+      .withSuccessHandler(function(result) {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = 'Submit Request →';
+        }
+
+        if (result.isDuplicate) {
+          showConfirmDialog(
+            'Possible Duplicate',
+            result.error,
+            function() {
+              formData.forceDuplicate = true;
+              submitForm(formData);
+            },
+            'Submit Anyway',
+            'Cancel'
+          );
+          return;
+        }
+
+        if (!result.success) {
+          showToast(result.error || 'Submission failed.', 'error');
+          return;
+        }
+
+        // Success!
+        state.lastSubmittedId = result.requestId;
+        clearDraft();
+        showSubmissionSuccess(result.requestId);
+        showToast('Request ' + result.requestId + ' submitted!', 'success');
+      })
+      .withFailureHandler(function(err) {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = 'Submit Request →';
+        }
+        showToast('Submission failed: ' + err.message, 'error');
+      })
+      .submitRequest(formData);
+  }
+
+  function showSubmissionSuccess(requestId) {
+    var form = document.getElementById('purchase-form');
+    var success = document.getElementById('form-success');
+    var idEl = document.getElementById('success-request-id');
+
+    if (form) form.classList.add('hidden');
+    document.querySelector('.info-bar').classList.add('hidden');
+    if (success) success.classList.remove('hidden');
+    if (idEl) idEl.textContent = requestId;
+  }
+
+  function startNewRequest() {
+    var form = document.getElementById('purchase-form');
+    var success = document.getElementById('form-success');
+
+    if (success) success.classList.add('hidden');
+    if (form) form.classList.remove('hidden');
+    document.querySelector('.info-bar').classList.remove('hidden');
+
+    resetForm();
+  }
+
+  function resetForm() {
+    // Clear items
+    var tbody = document.getElementById('items-tbody');
+    if (tbody) tbody.innerHTML = '';
+    state.itemCounter = 0;
+    addItemRow();
+
+    // Clear text fields
+    var fields = ['field-purpose', 'field-stock', 'field-notes'];
+    fields.forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+
+    setText('purpose-charcount', '0');
+    setText('grand-total', '₹0.00');
+
+    // Clear attachments
+    state.attachments = [];
+    renderFileList();
+
+    clearFormErrors();
+    clearDraft();
+  }
+
+  function viewSubmittedRequest() {
+    if (state.lastSubmittedId) {
+      navigateTo('print');
+      loadPrintView(state.lastSubmittedId);
+    }
+  }
+
+  // ─── Draft Saving ─────────────────────────────────────
+
+  function saveDraft() {
+    try {
+      var rows = document.querySelectorAll('#items-tbody tr');
+      var items = [];
+      rows.forEach(function(row) {
+        var idx = row.dataset.idx;
+        items.push({
+          description: getItemFieldValue(idx, 'description'),
+          quantity: getItemFieldValue(idx, 'quantity'),
+          unit: getItemFieldValue(idx, 'unit'),
+          costPerUnit: getItemFieldValue(idx, 'costPerUnit')
+        });
+      });
+
+      var draft = {
+        items: items,
+        purpose: (document.getElementById('field-purpose') || {}).value || '',
+        stockInHand: (document.getElementById('field-stock') || {}).value || '',
+        notes: (document.getElementById('field-notes') || {}).value || '',
+        savedAt: new Date().toISOString()
+      };
+
+      localStorage.setItem(state.draftKey, JSON.stringify(draft));
+    } catch (e) {
+      // Silent fail — localStorage might not be available
+    }
+  }
+
+  function restoreDraft() {
+    try {
+      var raw = localStorage.getItem(state.draftKey);
+      if (!raw) return;
+
+      var draft = JSON.parse(raw);
+      if (!draft || !draft.items || draft.items.length === 0) return;
+
+      // Check if draft is less than 24 hours old
+      var savedAt = new Date(draft.savedAt);
+      var now = new Date();
+      if ((now - savedAt) > 24 * 60 * 60 * 1000) {
+        clearDraft();
+        return;
+      }
+
+      // Restore items
+      var tbody = document.getElementById('items-tbody');
+      if (tbody) tbody.innerHTML = '';
+      state.itemCounter = 0;
+
+      draft.items.forEach(function(item) {
+        addItemRow();
+        var idx = state.itemCounter;
+        setItemFieldValue(idx, 'description', item.description);
+        setItemFieldValue(idx, 'quantity', item.quantity);
+        setItemFieldValue(idx, 'unit', item.unit);
+        setItemFieldValue(idx, 'costPerUnit', item.costPerUnit);
+        calculateRowTotal(idx);
+      });
+
+      calculateGrandTotal();
+
+      // Restore text fields
+      setFieldValue('field-purpose', draft.purpose);
+      setFieldValue('field-stock', draft.stockInHand);
+      setFieldValue('field-notes', draft.notes);
+      setText('purpose-charcount', (draft.purpose || '').length);
+
+      showToast('Draft restored from earlier session.', 'info');
+    } catch (e) {
+      // Silent fail
+    }
+  }
+
+  function clearDraft() {
+    try {
+      localStorage.removeItem(state.draftKey);
+    } catch (e) {}
+  }
+
+  function setItemFieldValue(idx, field, value) {
+    var input = document.querySelector('[data-field="' + field + '"][data-idx="' + idx + '"]');
+    if (input) input.value = value || '';
+  }
+
+  function setFieldValue(id, value) {
+    var el = document.getElementById(id);
+    if (el) el.value = value || '';
+  }
+
+  // ─── Dashboard ────────────────────────────────────────
+
+  function loadDashboard() {
+    var listEl = document.getElementById('request-list');
+    var emptyEl = document.getElementById('dashboard-empty');
+    var loadingEl = document.getElementById('dashboard-loading');
+
+    if (listEl) listEl.innerHTML = '';
+    if (emptyEl) emptyEl.classList.add('hidden');
+    if (loadingEl) loadingEl.classList.remove('hidden');
+
+    // Update title based on role
+    var titleEl = document.getElementById('dashboard-title');
+    var roleInfo = document.getElementById('results-role-info');
+    if (state.viewerRole) {
+      if (titleEl) titleEl.textContent = '📋 All Purchase Requests';
+      if (roleInfo) roleInfo.textContent = '👤 ' + state.viewerRole.department + ' (' + state.viewerRole.access + ')';
+    } else {
+      if (titleEl) titleEl.textContent = '📋 My Requests';
+      if (roleInfo) roleInfo.textContent = '';
+    }
+
+    state.dashOffset = 0;
+
+    google.script.run
+      .withSuccessHandler(function(result) {
+        if (loadingEl) loadingEl.classList.add('hidden');
+
+        console.log('[PRS] getRequests result:', JSON.stringify(result).substring(0, 500));
+
+        state.dashAllRequests = result.requests || [];
+        state.dashCanPrint = result.canPrint || false;
+
+        applyFilters();
+
+        // Show load more if needed
+        var loadMore = document.getElementById('load-more-wrapper');
+        if (loadMore) {
+          loadMore.classList.toggle('hidden', !result.hasMore);
+        }
+      })
+      .withFailureHandler(function(err) {
+        if (loadingEl) loadingEl.classList.add('hidden');
+        showToast('Failed to load requests: ' + err.message, 'error');
+      })
+      .getRequests(200, 0);
+  }
+
+  function refreshDashboard() {
+    loadDashboard();
+  }
+
+  function applyFilters() {
+    var search = (document.getElementById('filter-search') || {}).value || '';
+    var status = (document.getElementById('filter-status') || {}).value || '';
+    var dept = (document.getElementById('filter-department') || {}).value || '';
+    var dateFrom = (document.getElementById('filter-date-from') || {}).value || '';
+    var dateTo = (document.getElementById('filter-date-to') || {}).value || '';
+
+    search = search.toLowerCase().trim();
+
+    var filtered = state.dashAllRequests.filter(function(req) {
+      // Search
+      if (search) {
+        var haystack = [
+          req.requestId, req.staffName, req.staffEmail,
+          req.department, req.purpose
+        ].join(' ').toLowerCase();
+        if (haystack.indexOf(search) === -1) return false;
+      }
+
+      // Status
+      if (status && req.status !== status) return false;
+
+      // Department
+      if (dept && req.department !== dept) return false;
+
+      // Date range
+      if (dateFrom || dateTo) {
+        var reqDate = parseDateDMY(req.submittedDate);
+        if (reqDate) {
+          if (dateFrom && reqDate < new Date(dateFrom)) return false;
+          if (dateTo) {
+            var to = new Date(dateTo);
+            to.setHours(23, 59, 59, 999);
+            if (reqDate > to) return false;
+          }
+        }
+      }
+
+      return true;
+    });
+
+    state.dashRequests = filtered;
+    renderRequestList(filtered);
+
+    // Update count
+    var countEl = document.getElementById('results-count');
+    if (countEl) {
+      countEl.textContent = filtered.length + ' request' + (filtered.length !== 1 ? 's' : '') +
+        (filtered.length < state.dashAllRequests.length ? ' (filtered from ' + state.dashAllRequests.length + ')' : '');
+    }
+  }
+
+  function renderRequestList(requests) {
+    var listEl = document.getElementById('request-list');
+    var emptyEl = document.getElementById('dashboard-empty');
+
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    if (requests.length === 0) {
+      if (emptyEl) emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    if (emptyEl) emptyEl.classList.add('hidden');
+
+    requests.forEach(function(req) {
+      var statusClass = 'badge-' + (req.status || 'submitted').toLowerCase();
+      var card = document.createElement('div');
+      card.className = 'request-card';
+      card.onclick = function() { openDetailDrawer(req.requestId); };
+
+      card.innerHTML =
+        '<div class="request-card-id">' + escapeHtmlClient(req.requestId) + '</div>' +
+        '<div class="request-card-info">' +
+          '<div class="request-card-title">' + escapeHtmlClient(req.purpose || 'No purpose specified') + '</div>' +
+          '<div class="request-card-meta">' +
+            '<span>👤 ' + escapeHtmlClient(req.staffName) + '</span>' +
+            '<span>🏢 ' + escapeHtmlClient(req.department) + '</span>' +
+            '<span>📅 ' + escapeHtmlClient(req.submittedDate) + '</span>' +
+            '<span>📦 ' + req.totalItems + ' item' + (req.totalItems !== 1 ? 's' : '') + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="request-card-right">' +
+          '<div class="request-card-cost">₹' + formatCurrencyClient(req.totalCost || 0) + '</div>' +
+          '<span class="badge ' + statusClass + '">' + escapeHtmlClient(req.status || 'Submitted') + '</span>' +
+        '</div>';
+
+      listEl.appendChild(card);
+    });
+  }
+
+  // ─── Detail Drawer ────────────────────────────────────
+
+  function openDetailDrawer(requestId) {
+    var backdrop = document.getElementById('detail-drawer-backdrop');
+    var drawer = document.getElementById('detail-drawer');
+    var body = document.getElementById('drawer-body');
+
+    if (backdrop) backdrop.classList.remove('hidden');
+    if (drawer) drawer.classList.remove('hidden');
+    if (body) body.innerHTML = '<div class="text-center mt-xl"><div class="spinner"></div><p class="text-muted mt-md">Loading request…</p></div>';
+
+    document.body.style.overflow = 'hidden';
+
+    google.script.run
+      .withSuccessHandler(function(data) {
+        if (!data || data.error) {
+          if (body) body.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div class="empty-state-title">' + (data ? data.error : 'Failed to load') + '</div></div>';
+          return;
+        }
+
+        state.currentDetailRequest = data;
+        renderDetailDrawer(data);
+      })
+      .withFailureHandler(function(err) {
+        if (body) body.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div class="empty-state-title">Error: ' + err.message + '</div></div>';
+      })
+      .getRequestById(requestId);
+  }
+
+  function renderDetailDrawer(data) {
+    var idEl = document.getElementById('drawer-request-id');
+    var badge = document.getElementById('drawer-status-badge');
+    var body = document.getElementById('drawer-body');
+    var printBtn = document.getElementById('btn-print-request');
+    var cloneBtn = document.getElementById('btn-clone-request');
+
+    if (idEl) idEl.textContent = data.requestId;
+    if (badge) {
+      badge.textContent = data.status || 'Submitted';
+      badge.className = 'badge badge-' + (data.status || 'submitted').toLowerCase();
+    }
+
+    // Show/hide print button
+    if (printBtn) {
+      printBtn.classList.toggle('hidden', !data.canPrint);
+    }
+    // Show clone button for user's own requests
+    if (cloneBtn) {
+      var isOwner = data.staffEmail && data.staffEmail.toLowerCase() === state.email.toLowerCase();
+      cloneBtn.classList.toggle('hidden', !isOwner);
+    }
+
+    // Build detail HTML
+    var itemsHtml = '';
+    (data.items || []).forEach(function(item, i) {
+      itemsHtml +=
+        '<tr>' +
+          '<td style="text-align:center;color:var(--text-muted);">' + (i + 1) + '</td>' +
+          '<td>' + escapeHtmlClient(item.description) + '</td>' +
+          '<td style="text-align:center;">' + item.quantity + ' ' + (item.unit || '') + '</td>' +
+          '<td style="text-align:right;">₹' + formatCurrencyClient(item.costPerUnit || 0) + '</td>' +
+          '<td style="text-align:right;font-weight:600;">₹' + formatCurrencyClient(item.totalCost || 0) + '</td>' +
+        '</tr>';
+    });
+
+    var attachHtml = '';
+    if (data.attachmentUrls && data.attachmentUrls.length > 0) {
+      attachHtml = '<div class="detail-section"><div class="detail-section-title">Attachments</div>';
+      data.attachmentUrls.forEach(function(url, i) {
+        attachHtml += '<div style="margin-bottom:4px;"><a href="' + url + '" target="_blank" style="font-size:0.85rem;">📎 Attachment ' + (i + 1) + '</a></div>';
+      });
+      attachHtml += '</div>';
+    }
+
+    if (body) {
+      body.innerHTML =
+        '<div class="detail-section">' +
+          '<div class="detail-section-title">Staff Details</div>' +
+          '<div class="detail-grid">' +
+            '<div class="detail-field"><div class="detail-field-label">Name</div><div class="detail-field-value">' + escapeHtmlClient(data.staffName) + '</div></div>' +
+            '<div class="detail-field"><div class="detail-field-label">Department</div><div class="detail-field-value">' + escapeHtmlClient(data.department) + '</div></div>' +
+            '<div class="detail-field"><div class="detail-field-label">Email</div><div class="detail-field-value">' + escapeHtmlClient(data.staffEmail) + '</div></div>' +
+            '<div class="detail-field"><div class="detail-field-label">Date</div><div class="detail-field-value">' + escapeHtmlClient(data.submittedDate) + '</div></div>' +
+          '</div>' +
+        '</div>' +
+
+        '<div class="detail-section">' +
+          '<div class="detail-section-title">Items Required</div>' +
+          '<table class="detail-items-table">' +
+            '<thead><tr>' +
+              '<th style="width:36px;text-align:center;">#</th>' +
+              '<th>Description</th>' +
+              '<th style="text-align:center;">Qty</th>' +
+              '<th style="text-align:right;">Rate</th>' +
+              '<th style="text-align:right;">Total</th>' +
+            '</tr></thead>' +
+            '<tbody>' + itemsHtml + '</tbody>' +
+            '<tfoot><tr>' +
+              '<td colspan="4" style="text-align:right;">Grand Total</td>' +
+              '<td style="text-align:right;font-size:1.05rem;">₹' + formatCurrencyClient(data.totalCost || 0) + '</td>' +
+            '</tr></tfoot>' +
+          '</table>' +
+        '</div>' +
+
+        '<div class="detail-section">' +
+          '<div class="detail-section-title">Purpose</div>' +
+          '<p style="font-size:0.9rem;line-height:1.6;color:var(--text);">' + escapeHtmlClient(data.purpose || '—') + '</p>' +
+        '</div>' +
+
+        (data.stockInHand ? (
+          '<div class="detail-section">' +
+            '<div class="detail-section-title">Stock in Hand</div>' +
+            '<p style="font-size:0.9rem;color:var(--text);">' + escapeHtmlClient(data.stockInHand) + '</p>' +
+          '</div>'
+        ) : '') +
+
+        attachHtml +
+
+        (data.notes ? (
+          '<div class="detail-section">' +
+            '<div class="detail-section-title">Notes</div>' +
+            '<p style="font-size:0.85rem;color:var(--text-secondary);">' + escapeHtmlClient(data.notes) + '</p>' +
+          '</div>'
+        ) : '') +
+
+        '<div class="detail-section" style="margin-bottom:0;">' +
+          '<div style="padding:12px 16px;background:var(--accent-bg);border-radius:var(--radius-md);border:1px solid #e0d8c0;">' +
+            '<p style="font-size:0.82rem;color:var(--text-secondary);font-style:italic;margin:0;line-height:1.5;">' + escapeHtmlClient(data.digitalSignature || '') + '</p>' +
+          '</div>' +
+        '</div>';
+    }
+  }
+
+  function closeDrawer() {
+    var backdrop = document.getElementById('detail-drawer-backdrop');
+    var drawer = document.getElementById('detail-drawer');
+
+    if (backdrop) backdrop.classList.add('hidden');
+    if (drawer) drawer.classList.add('hidden');
+    document.body.style.overflow = '';
+
+    state.currentDetailRequest = null;
+  }
+
+  function printRequest() {
+    if (state.currentDetailRequest) {
+      var id = state.currentDetailRequest.requestId;
+      console.log('[PRS] printRequest called, id:', id);
+      closeDrawer();
+      navigateTo('print');
+      loadPrintView(id);
+    } else {
+      console.log('[PRS] printRequest: no currentDetailRequest');
+    }
+  }
+
+  function cloneRequest() {
+    if (!state.currentDetailRequest) return;
+
+    var data = state.currentDetailRequest;
+    closeDrawer();
+    navigateTo('form');
+
+    // Start new then populate
+    startNewRequest();
+
+    // Clear default row and add items from cloned request
+    var tbody = document.getElementById('items-tbody');
+    if (tbody) tbody.innerHTML = '';
+    state.itemCounter = 0;
+
+    (data.items || []).forEach(function(item) {
+      addItemRow();
+      var idx = state.itemCounter;
+      setItemFieldValue(idx, 'description', item.description);
+      setItemFieldValue(idx, 'quantity', item.quantity);
+      setItemFieldValue(idx, 'unit', item.unit);
+      setItemFieldValue(idx, 'costPerUnit', item.costPerUnit);
+      calculateRowTotal(idx);
+    });
+
+    calculateGrandTotal();
+
+    setFieldValue('field-purpose', data.purpose);
+    setFieldValue('field-stock', data.stockInHand);
+    setFieldValue('field-notes', data.notes);
+    setText('purpose-charcount', (data.purpose || '').length);
+
+    showToast('Request cloned. Review and submit when ready.', 'info');
+  }
+
+  // ─── Print View ───────────────────────────────────────
+
+  function loadPrintView(requestId) {
+    console.log('[PRS] loadPrintView called with requestId:', requestId);
+    var content = document.getElementById('print-content');
+    if (!content) {
+      console.log('[PRS] loadPrintView: print-content element NOT FOUND');
+      return;
+    }
+
+    // Show loading
+    content.style.opacity = '0.5';
+
+    google.script.run
+      .withSuccessHandler(function(data) {
+        content.style.opacity = '1';
+        console.log('[PRS] getPrintData returned:', JSON.stringify(data).substring(0, 800));
+
+        if (!data || data.error) {
+          console.log('[PRS] getPrintData error:', data ? data.error : 'null data');
+          showToast(data ? data.error : 'Failed to load request.', 'error');
+          return;
+        }
+
+        populatePrintView(data);
+      })
+      .withFailureHandler(function(err) {
+        content.style.opacity = '1';
+        console.log('[PRS] getPrintData FAILED:', err.message);
+        showToast('Failed to load: ' + err.message, 'error');
+      })
+      .getPrintData(requestId);
+  }
+
+  function populatePrintView(data) {
+    console.log('[PRS] populatePrintView called');
+    var logoEl = document.getElementById('print-school-logo');
+    var nameEl = document.getElementById('print-school-name');
+    
+    if (data.schoolLogoUrl) {
+      if (logoEl) {
+        logoEl.src = data.schoolLogoUrl;
+        logoEl.style.display = 'inline-block';
+      }
+      if (nameEl) nameEl.style.display = 'none';
+    } else {
+      if (logoEl) logoEl.style.display = 'none';
+      if (nameEl) nameEl.style.display = 'block';
+    }
+
+    setText('print-school-name', (data.schoolName || 'CHRISTWOOD').toUpperCase());
+    setText('print-request-id', data.requestId);
+    setText('print-date', data.submittedDate);
+    setText('print-staff-name', data.staffName);
+    setText('print-department', data.department);
+    setText('print-email', data.staffEmail);
+    setText('print-purpose', data.purpose || '—');
+    setText('print-stock', data.stockInHand || 'N/A');
+    setText('print-grand-total', '₹' + formatCurrencyClient(data.totalCost || 0));
+    setText('print-digital-signature', data.digitalSignature || '');
+
+    // Items
+    var tbody = document.getElementById('print-items-tbody');
+    if (tbody) {
+      var html = '';
+      (data.items || []).forEach(function(item, i) {
+        html +=
+          '<tr>' +
+            '<td style="padding:6px 8px;text-align:center;border:1px solid var(--border);color:var(--text-muted);">' + (i + 1) + '</td>' +
+            '<td style="padding:6px 8px;border:1px solid var(--border);color:var(--text);font-size:0.85rem;">' + escapeHtmlClient(item.description) + '</td>' +
+            '<td style="padding:6px 8px;text-align:center;border:1px solid var(--border);">' + item.quantity + '</td>' +
+            '<td style="padding:6px 8px;text-align:center;border:1px solid var(--border);">' + escapeHtmlClient(item.unit || '—') + '</td>' +
+            '<td style="padding:6px 8px;text-align:right;border:1px solid var(--border);">₹' + formatCurrencyClient(item.costPerUnit || 0) + '</td>' +
+            '<td style="padding:6px 8px;text-align:right;border:1px solid var(--border);font-weight:600;">₹' + formatCurrencyClient(item.totalCost || 0) + '</td>' +
+          '</tr>';
+      });
+      tbody.innerHTML = html;
+    }
+
+    // Stock section — hide if empty
+    var stockSection = document.getElementById('print-stock-section');
+    if (stockSection) {
+      stockSection.classList.toggle('hidden', !data.stockInHand);
+    }
+
+    // Attachments
+    var attSection = document.getElementById('print-attachments-section');
+    var attEl = document.getElementById('print-attachments');
+    if (data.attachmentUrls && data.attachmentUrls.length > 0) {
+      if (attSection) attSection.classList.remove('hidden');
+      if (attEl) {
+        var attHtml = '';
+        data.attachmentUrls.forEach(function(url, i) {
+          attHtml += '<div style="margin-bottom:4px;"><a href="' + url + '" target="_blank">📎 Attachment ' + (i + 1) + '</a></div>';
+        });
+        attEl.innerHTML = attHtml;
+      }
+    } else {
+      if (attSection) attSection.classList.add('hidden');
+    }
+
+    // Notes
+    var notesSection = document.getElementById('print-notes-section');
+    if (notesSection) {
+      notesSection.classList.toggle('hidden', !data.notes);
+      setText('print-notes', data.notes || '');
+    }
+  }
+
+  // ─── Guest Login ──────────────────────────────────────
+
+  function showGuestLogin() {
+    var main = document.querySelector('.app-main');
+    if (!main) return;
+
+    main.innerHTML =
+      '<div class="unauth-container">' +
+        '<div class="card" style="max-width:440px;width:100%;">' +
+          '<div class="card-body" style="text-align:center;padding:40px;">' +
+            '<div style="font-size:3rem;margin-bottom:16px;">🔑</div>' +
+            '<h2 style="margin-bottom:8px;">Welcome, Guest</h2>' +
+            '<p class="text-muted" style="margin-bottom:24px;">Please enter your authorised email address to continue.</p>' +
+            '<div class="form-group" style="text-align:left;">' +
+              '<input type="email" id="guest-email-input" class="form-input" placeholder="your.email@example.com">' +
+            '</div>' +
+            '<button type="button" class="btn btn-accent btn-lg" style="width:100%;" onclick="PRS.submitGuestEmail()">Continue →</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function submitGuestEmail() {
+    var input = document.getElementById('guest-email-input');
+    if (!input || !input.value.trim()) {
+      showToast('Please enter an email address.', 'error');
+      return;
+    }
+
+    showLoading('Verifying…');
+
+    google.script.run
+      .withSuccessHandler(function(result) {
+        hideLoading();
+        if (!result.isValid) {
+          showToast(result.error || 'This email is not authorised.', 'error');
+          return;
+        }
+        handleInitData(result, 'form', '');
+      })
+      .withFailureHandler(function(err) {
+        hideLoading();
+        showToast('Verification failed: ' + err.message, 'error');
+      })
+      .validateManualEmail(input.value.trim());
+  }
+
+  // ─── Unauthorised ─────────────────────────────────────
+
+  function showUnauthorised(message) {
+    var main = document.querySelector('.app-main');
+    if (!main) return;
+
+    main.innerHTML =
+      '<div class="unauth-container">' +
+        '<div class="unauth-card card">' +
+          '<div class="card-body" style="padding:40px;">' +
+            '<div class="unauth-icon">🔒</div>' +
+            '<h2 style="margin-bottom:12px;">Access Restricted</h2>' +
+            '<p class="text-muted">' + escapeHtmlClient(message) + '</p>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    // Hide nav
+    var nav = document.querySelector('.app-nav');
+    if (nav) nav.style.display = 'none';
+  }
+
+  // ─── Loading ──────────────────────────────────────────
+
+  function showLoading(text) {
+    var existing = document.getElementById('global-loading');
+    if (existing) existing.remove();
+
+    var overlay = document.createElement('div');
+    overlay.id = 'global-loading';
+    overlay.className = 'loading-overlay';
+    overlay.innerHTML =
+      '<div class="spinner"></div>' +
+      '<div class="loading-text">' + (text || 'Loading…') + '</div>';
+    document.body.appendChild(overlay);
+  }
+
+  function hideLoading() {
+    var overlay = document.getElementById('global-loading');
+    if (overlay) overlay.remove();
+  }
+
+  // ─── Toasts ───────────────────────────────────────────
+
+  function showToast(message, type) {
+    type = type || 'info';
+    var container = document.getElementById('toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'toast-container';
+      container.className = 'toast-container';
+      document.body.appendChild(container);
+    }
+
+    var icons = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
+    var toast = document.createElement('div');
+    toast.className = 'toast toast-' + type;
+    toast.innerHTML = '<span>' + (icons[type] || '') + '</span><span>' + escapeHtmlClient(message) + '</span>';
+
+    container.appendChild(toast);
+
+    // Auto-remove after 5s
+    setTimeout(function() {
+      toast.classList.add('toast-exit');
+      setTimeout(function() { toast.remove(); }, 300);
+    }, 5000);
+  }
+
+  // ─── Confirm Dialog ───────────────────────────────────
+
+  function showConfirmDialog(title, message, onConfirm, confirmText, cancelText) {
+    var existing = document.getElementById('confirm-dialog-overlay');
+    if (existing) existing.remove();
+
+    var overlay = document.createElement('div');
+    overlay.id = 'confirm-dialog-overlay';
+    overlay.className = 'dialog-overlay';
+    overlay.innerHTML =
+      '<div class="dialog">' +
+        '<h3>' + escapeHtmlClient(title) + '</h3>' +
+        '<p>' + escapeHtmlClient(message) + '</p>' +
+        '<div class="dialog-actions">' +
+          '<button type="button" class="btn btn-outline" id="dialog-cancel">' + (cancelText || 'Cancel') + '</button>' +
+          '<button type="button" class="btn btn-accent" id="dialog-confirm">' + (confirmText || 'Confirm') + '</button>' +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(overlay);
+
+    document.getElementById('dialog-cancel').onclick = function() { overlay.remove(); };
+    document.getElementById('dialog-confirm').onclick = function() {
+      overlay.remove();
+      if (onConfirm) onConfirm();
+    };
+  }
+
+  // ─── Helpers ──────────────────────────────────────────
+
+  function setText(id, text) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  function formatDateDisplay(date) {
+    var d = date.getDate();
+    var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return d + ' ' + months[date.getMonth()] + ' ' + date.getFullYear();
+  }
+
+  function formatCurrencyClient(num) {
+    if (isNaN(num)) return '0.00';
+    num = parseFloat(num);
+    var parts = num.toFixed(2).split('.');
+    var intPart = parts[0];
+    var decPart = parts[1];
+
+    var lastThree = intPart.slice(-3);
+    var rest = intPart.slice(0, -3);
+
+    if (rest.length > 0) {
+      lastThree = ',' + lastThree;
+      var formatted = '';
+      for (var i = rest.length - 1; i >= 0; i--) {
+        formatted = rest[i] + formatted;
+        if ((rest.length - i) % 2 === 0 && i > 0) {
+          formatted = ',' + formatted;
+        }
+      }
+      return formatted + lastThree + '.' + decPart;
+    }
+    return lastThree + '.' + decPart;
+  }
+
+  function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function escapeHtmlClient(str) {
+    if (!str) return '';
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function parseDateDMY(str) {
+    if (!str) return null;
+    var parts = String(str).split('/');
+    if (parts.length !== 3) return null;
+    return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+  }
+
+  // ─── Public API ───────────────────────────────────────
+
+  return {
+    init: init,
+    navigateTo: navigateTo,
+    addItemRow: addItemRow,
+    removeItemRow: removeItemRow,
+    removeFile: removeFile,
+    resetForm: resetForm,
+    startNewRequest: startNewRequest,
+    viewSubmittedRequest: viewSubmittedRequest,
+    refreshDashboard: refreshDashboard,
+    applyFilters: applyFilters,
+    openDetailDrawer: openDetailDrawer,
+    closeDrawer: closeDrawer,
+    printRequest: printRequest,
+    cloneRequest: cloneRequest,
+    loadMoreRequests: function() { /* future pagination */ },
+    submitGuestEmail: submitGuestEmail,
+    showToast: showToast
+  };
+
+})();
+</script>
