@@ -1,0 +1,6 @@
+{
+  "agent_enabled": true,
+  "agent_until": "2026-09-19",
+  "note": "Pilot window. Phase 2 will have the GAS nightly sync write this file from the tracker Config tab. For now it is hand-edited. The routine MUST exit immediately if agent_enabled is false or today's date is past agent_until.",
+  "max_tickets_per_run": 1
+}
