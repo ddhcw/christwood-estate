@@ -146,6 +146,17 @@ function submitRequest(formData) {
         submittedDate: submittedDate,
         attachmentCount: attachmentUrls.length
       });
+      sendApprovalNotification({
+        requestId: requestId,
+        staffName: userInfo.name,
+        staffEmail: email,
+        department: userInfo.department,
+        purpose: formData.purpose,
+        items: items,
+        totalCost: totalCost,
+        submittedDate: submittedDate,
+        attachmentCount: attachmentUrls.length
+      });
     } catch (notifError) {
       Logger.log('Notification failed (request still saved): ' + notifError.message);
     }

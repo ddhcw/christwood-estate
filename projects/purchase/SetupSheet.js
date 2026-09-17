@@ -87,45 +87,46 @@ function createConfigTab_(ss) {
     ['', '', '', ''],
     // Row 10 - Section header
     ['📧 Email Notifications', '', '', ''],
-    // Row 11-14
+    // Row 11-15
     ['', 'On Submission', '', 'Comma-separated email addresses to notify when a request is submitted'],
     ['', 'On Principal Approval', '', '(Future) Notify when Principal approves'],
-    ['', 'On CEO Approval', '', '(Future) Notify when CEO approves'],
+    ['', 'On Admin Head Approval', '', 'Comma-separated email addresses — notifies the Admin Head (non-academic head) for approval when a request is submitted'],
+    ['', 'On CEO Approval', '', 'Comma-separated email addresses — notifies the CEO for approval when a request is submitted'],
     ['', 'On Rejection', '', '(Future) Notify when a request is rejected'],
-    // Row 15 - blank
+    // Row 16 - blank
     ['', '', '', ''],
-    // Row 16 - Section header
+    // Row 17 - Section header
     ['🏢 Department Roles & Access', '', '', ''],
-    // Row 17 - Sub-headers
+    // Row 18 - Sub-headers
     ['', 'Department', 'Email IDs (comma-separated)', 'Access Level'],
-    // Row 18-22
+    // Row 19-23 (unchanged content, shifted down by the new Admin Head row above)
     ['', 'Purchase', '', 'View + Print'],
     ['', 'HR', '', 'View + Print'],
     ['', 'Finance', '', 'View'],
     ['', 'Stock Keeping', '', 'View'],
     ['', 'Management', '', 'View'],
-    // Row 23 - blank
+    // Row 24 - blank
     ['', '', '', ''],
-    // Row 24 - Section header
+    // Row 25 - Section header
     ['👤 Guest / Consultant Access', '', '', ''],
-    // Row 25
+    // Row 26
     ['', 'Allowed Guest Emails', '', 'Comma-separated — these emails can submit requests without HR verification'],
-    // Row 26 - blank
+    // Row 27 - blank
     ['', '', '', ''],
-    // Row 27 - Section header
+    // Row 28 - Section header
     ['⚙️ System Settings', '', '', ''],
-    // Row 28-33
+    // Row 29-34
     ['', 'Attachment Folder ID', '', 'Optional: Specific Google Drive Folder ID to store attachments. If fully empty, will create automatically in parent directory.'],
     ['', 'Max File Size (MB)', '10', 'Maximum size per attachment in megabytes'],
     ['', 'Allowed File Types', 'pdf,jpg,jpeg,png', 'Comma-separated file extensions'],
     ['', 'School Name', 'Christwood', 'Displayed in print headers and notifications'],
     ['', 'School Logo URL', '', 'Optional: Google Drive link or public URL for the school logo on the print form.'],
     ['', 'Digital Signature Text', '{{email}} has submitted this purchase request digitally on {{date}}. This digital submission serves as the requestor\'s authorisation and attestation — no physical signature is required.', 'Use {{email}} and {{date}} as placeholders'],
-    // Row 34 - blank
+    // Row 35 - blank
     ['', '', '', ''],
-    // Row 35 - Section header
+    // Row 36 - Section header
     ['📊 HR Column Mapping', '', '', ''],
-    // Row 36-38
+    // Row 37-39
     ['', 'HR Column: Staff Name', 'C', 'Column letter in ImportHR tab containing staff names (e.g. C)'],
     ['', 'HR Column: Department', 'J', 'Column letter in ImportHR tab containing departments (e.g. J)'],
     ['', 'HR Column: Email ID', 'N', 'Column letter in ImportHR tab containing email addresses (e.g. N)'],
@@ -142,7 +143,7 @@ function createConfigTab_(ss) {
   titleRange.setVerticalAlignment('middle');
   sheet.setRowHeight(1, 44);
   // Section headers
-  var sectionRows = [3, 10, 16, 24, 27, 35];
+  var sectionRows = [3, 10, 17, 25, 28, 36];
   sectionRows.forEach(function(row) {
     var range = sheet.getRange(row, 1, 1, 4);
     range.setFontSize(11).setFontWeight('bold').setFontColor('#1a1f36');
@@ -150,12 +151,12 @@ function createConfigTab_(ss) {
     sheet.setRowHeight(row, 32);
   });
   // Sub-header row (Department roles)
-  var subHeaderRange = sheet.getRange(17, 2, 1, 3);
+  var subHeaderRange = sheet.getRange(18, 2, 1, 3);
   subHeaderRange.setFontWeight('bold').setFontColor('#5a6a8a');
   subHeaderRange.setBackground('#f5f7fb');
   // Setting keys column - subtle style
   var keyRanges = [
-    [4, 8], [11, 14], [18, 22], [25, 25], [28, 33], [36, 38]
+    [4, 8], [11, 15], [19, 23], [26, 26], [29, 34], [37, 39]
   ];
   keyRanges.forEach(function(range) {
     sheet.getRange(range[0], 2, range[1] - range[0] + 1, 1)
@@ -168,9 +169,9 @@ function createConfigTab_(ss) {
     .setFontStyle('italic');
   // Value column - editable style
   var valueRows = [
-    4, 5, 6, 7, 8, 11, 12, 13, 14,
-    18, 19, 20, 21, 22, 25,
-    28, 29, 30, 31, 32, 33, 36, 37, 38
+    4, 5, 6, 7, 8, 11, 12, 13, 14, 15,
+    19, 20, 21, 22, 23, 26,
+    29, 30, 31, 32, 33, 34, 37, 38, 39
   ];
   valueRows.forEach(function(row) {
     sheet.getRange(row, 3)
