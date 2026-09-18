@@ -1,0 +1,31 @@
+<div class="card" id="form-fuelreport">
+  <h2>🧾 Fuel Process report</h2>
+  <p class="muted" style="margin-top:-6px">Pick the period and generate the signed PDF. Any earlier
+    bill that has never been on a report is swept in automatically, so a late voucher is not missed.</p>
+
+  <div class="two">
+    <div class="field">
+      <label class="req">From</label>
+      <input type="date" id="rptFrom" onchange="previewReport()">
+    </div>
+    <div class="field">
+      <label class="req">To</label>
+      <input type="date" id="rptTo" onchange="previewReport()">
+    </div>
+  </div>
+
+  <div class="seg" id="rptQuick" style="margin-bottom:12px">
+    <button class="seg-btn" onclick="rptPreset('this')">This month</button>
+    <button class="seg-btn" onclick="rptPreset('last')">Last month</button>
+    <button class="seg-btn" onclick="rptPreset('week')">Last 7 days</button>
+  </div>
+
+  <div id="rptPreview" class="muted">Pick a period to see what it will contain.</div>
+
+  <button class="btn" id="rptBtn" onclick="makeFuelReport()" disabled>Generate PDF</button>
+  <div class="hint">A copy is filed in Drive → <b>Fleet Fuel Reports</b> as well as downloading here.</div>
+</div>
+
+<div id="dashBody">
+  <div class="loading">Loading dashboard…</div>
+</div>

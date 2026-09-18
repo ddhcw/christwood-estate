@@ -1,0 +1,86 @@
+<!-- LIST -->
+<div id="vehListWrap">
+  <div class="card">
+    <div class="listhead">
+      <h2 style="margin:0">🚐 Vehicles</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn small ghost" onclick="openQr()">📱 QR</button>
+        <button class="btn small" onclick="openVehAdd()">+ Add</button>
+      </div>
+    </div>
+    <input type="search" id="vehSearch" placeholder="Search reg / model…" oninput="renderVehList()">
+    <div id="vehList"><div class="loading">Loading…</div></div>
+  </div>
+</div>
+
+<!-- QR CODES -->
+<div id="vehQrWrap" style="display:none">
+  <div class="card">
+    <div class="listhead">
+      <h2 style="margin:0">📱 QR codes</h2>
+      <button class="btn small" onclick="window.print()">🖨 Print</button>
+    </div>
+    <p class="muted" style="margin-top:0">Print these and stick one in each bus. Scanning a code opens the app with that vehicle already selected — no more picking the wrong bus.</p>
+    <div id="qrGrid" class="qrgrid"><div class="loading">Loading…</div></div>
+    <button class="btn ghost" style="margin-top:10px" onclick="backToVehList()">Back to list</button>
+  </div>
+</div>
+
+<!-- EDITOR -->
+<div id="vehEditorWrap" style="display:none">
+  <div class="card" id="form-vehicle">
+    <h2 id="vehEditorTitle">Add a vehicle</h2>
+
+    <div class="two">
+      <div class="field"><label class="req">Registration no.</label><input type="text" data-field="reg_no" placeholder="e.g. KA01AB1234"></div>
+      <div class="field"><label>Make / model</label><input type="text" data-field="make_model" placeholder="e.g. Tata Starbus"></div>
+    </div>
+    <div class="field">
+      <label>Route no.</label>
+      <input type="text" data-field="route_no" placeholder="e.g. R15">
+      <div class="hint">Printed on the fuel report and on the attendance sheet, exactly as you type it here.</div>
+    </div>
+    <div class="two">
+      <div class="field"><label>Type</label><select class="js-choice" data-choice="type" data-field="type"></select></div>
+      <div class="field"><label>Seating</label><input type="number" inputmode="numeric" data-field="seating"></div>
+    </div>
+    <div class="two">
+      <div class="field"><label>Year</label><input type="number" inputmode="numeric" data-field="year" placeholder="e.g. 2019"></div>
+      <div class="field"><label>In-service date</label><input type="date" data-field="in_service_date"></div>
+    </div>
+    <div class="two">
+      <div class="field">
+        <label>Status</label>
+        <select class="js-choice" data-choice="status" data-field="status" onchange="vehStatusChanged()"></select>
+        <div class="hint" id="vehStatusHint"></div>
+      </div>
+      <div class="field"><label>Off road since</label><input type="date" data-field="off_road_since"></div>
+    </div>
+
+    <div class="two">
+      <div class="field">
+        <label>Odometer working?</label>
+        <select class="js-choice" data-choice="yesno" data-field="odo_working" onchange="vehOdoChanged()"></select>
+      </div>
+      <div class="field"><label>Not working since</label><input type="date" data-field="odo_broken_since"></div>
+    </div>
+    <div class="field" id="vehOdoReadingField" style="display:none">
+      <label>Odometer reading now (km)</label>
+      <input type="number" inputmode="numeric" data-field="odo_reading" placeholder="what the meter shows today">
+      <div class="hint">Needed to start this vehicle counting again. If it is lower than the old reading we
+        treat it as a replacement meter and count afresh from here.</div>
+    </div>
+
+    <div class="two">
+      <div class="field"><label>GPS device id</label><input type="text" data-field="gps_device_id" placeholder="optional"></div>
+      <div class="field"><label>Access card id</label><input type="text" data-field="access_card_id" placeholder="optional"></div>
+    </div>
+
+    <button class="btn" id="vehSaveBtn" onclick="saveVehicle()">Add vehicle</button>
+    <div class="editbar" id="vehRetireBar">
+      <button class="btn danger" onclick="retireVeh()">Retire this vehicle</button>
+    </div>
+    <button class="btn ghost" style="margin-top:10px" onclick="backToVehList()">Back to list</button>
+    <div class="hint" id="vehEditedHint"></div>
+  </div>
+</div>

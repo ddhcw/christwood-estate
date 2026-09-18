@@ -1,0 +1,33 @@
+<div class="card" id="form-doc">
+  <h2>📄 Add a document</h2>
+  <p class="muted" style="margin-top:-6px">Insurance, FC, permit, PUC. You'll get an email before each one expires.</p>
+
+  <div class="field">
+    <label class="req">Vehicle</label>
+    <select class="js-vehicle" data-field="vehicle_id"></select>
+  </div>
+
+  <div class="two">
+    <div class="field">
+      <label class="req">Document type</label>
+      <select class="js-choice" data-choice="doc_type" data-field="doc_type"></select>
+    </div>
+    <div class="field">
+      <label>Number</label>
+      <input type="text" data-field="number" placeholder="policy / certificate no.">
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="field">
+      <label>Issue date</label>
+      <input type="date" data-field="issue_date">
+    </div>
+    <div class="field">
+      <label class="req">Expiry date</label>
+      <input type="date" data-field="expiry_date">
+    </div>
+  </div>
+
+  <button class="btn" onclick="saveDoc()">Save document</button>
+</div>

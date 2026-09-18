@@ -1,0 +1,81 @@
+<!-- DAY MARKING -->
+<div id="attDayWrap">
+  <div class="card">
+    <div class="listhead">
+      <h2 style="margin:0">🗓 Mark attendance</h2>
+      <button class="btn small ghost" onclick="attShow('month')">Month view</button>
+    </div>
+
+    <div class="two">
+      <div class="field">
+        <label>Date</label>
+        <input type="date" id="attDate" onchange="loadAttendanceDay()">
+      </div>
+      <div class="field">
+        <label>Everyone</label>
+        <div style="display:flex;gap:8px">
+          <button class="btn small" style="flex:1" onclick="attSetAll('P')">All present</button>
+          <button class="btn small ghost" style="flex:1" onclick="attSetAll('')">Clear</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="attDayHint" class="hint"></div>
+    <div id="attSummary" class="attsum"></div>
+    <input type="search" id="attSearch" placeholder="Search driver or route…" oninput="renderAttDay()">
+    <div id="attList"><div class="loading">Loading…</div></div>
+
+    <button class="btn" id="attSaveBtn" onclick="saveAttendanceDay()">Save attendance</button>
+    <div class="hint">Everyone starts as <b>P</b>. Tap only the people who are not in, then save.</div>
+  </div>
+
+  <div class="card">
+    <div class="listhead">
+      <h2 style="margin:0">➕ Extra rows</h2>
+      <button class="btn small" onclick="openRosterAdd()">+ Add</button>
+    </div>
+    <p class="muted" style="margin-top:0">For lines that are not a driver in the system — the Standby
+      slots, or a post with nobody named against it yet.</p>
+    <div id="rosterList"></div>
+  </div>
+</div>
+
+<!-- ROSTER ROW EDITOR -->
+<div id="attRosterWrap" style="display:none">
+  <div class="card" id="form-roster">
+    <h2 id="rosterEditorTitle">Add a row</h2>
+    <div class="field"><label class="req">Shows as</label>
+      <input type="text" data-field="label" placeholder="e.g. Standby"></div>
+    <div class="two">
+      <div class="field"><label>Route no.</label>
+        <input type="text" data-field="route_no" placeholder="optional"></div>
+      <div class="field"><label>Order</label>
+        <input type="number" inputmode="numeric" data-field="sort_order" placeholder="e.g. 330"></div>
+    </div>
+    <button class="btn" id="rosterSaveBtn" onclick="saveRosterRow()">Add row</button>
+    <div class="editbar" id="rosterRetireBar">
+      <button class="btn danger" onclick="retireRoster()">Remove this row</button>
+    </div>
+    <button class="btn ghost" style="margin-top:10px" onclick="attShow('day')">Back</button>
+  </div>
+</div>
+
+<!-- MONTH VIEW -->
+<div id="attMonthWrap" style="display:none">
+  <div class="card">
+    <div class="listhead">
+      <h2 style="margin:0">📆 Month sheet</h2>
+      <button class="btn small ghost" onclick="attShow('day')">Mark a day</button>
+    </div>
+    <div class="field">
+      <label>Month</label>
+      <input type="month" id="attMonth" onchange="loadAttendanceMonth()">
+    </div>
+    <div id="attMonthBody"><div class="loading">Loading…</div></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn" style="flex:1" onclick="makeAttendancePdf()">PDF</button>
+      <button class="btn ghost" style="flex:1" onclick="makeAttendanceCsv()">CSV</button>
+    </div>
+    <div class="hint">A copy of the PDF is filed in Drive → <b>Fleet Attendance</b>.</div>
+  </div>
+</div>

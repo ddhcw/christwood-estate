@@ -1,0 +1,44 @@
+<!-- LIST -->
+<div id="drvListWrap">
+  <div class="card">
+    <div class="listhead">
+      <h2 style="margin:0">🧑‍✈️ Drivers</h2>
+      <button class="btn small" onclick="openDrvAdd()">+ Add</button>
+    </div>
+    <input type="search" id="drvSearch" placeholder="Search name…" oninput="renderDrvList()">
+    <div id="drvList"><div class="loading">Loading…</div></div>
+  </div>
+</div>
+
+<!-- EDITOR -->
+<div id="drvEditorWrap" style="display:none">
+  <div class="card" id="form-driver">
+    <h2 id="drvEditorTitle">Add a driver</h2>
+
+    <div class="two">
+      <div class="field"><label class="req">Name</label><input type="text" data-field="name"></div>
+      <div class="field"><label>Phone</label><input type="tel" data-field="phone"></div>
+    </div>
+    <div class="two">
+      <div class="field"><label>Licence no.</label><input type="text" data-field="licence_no"></div>
+      <div class="field"><label>Licence expiry</label><input type="date" data-field="licence_expiry"></div>
+    </div>
+    <div class="two">
+      <div class="field"><label>Assigned vehicle</label><select class="js-vehicle" data-field="assigned_vehicle"></select></div>
+      <div class="field"><label>Status</label><select class="js-choice" data-choice="driver_status" data-field="status"></select></div>
+    </div>
+    <div class="field">
+      <label>Order on the attendance sheet</label>
+      <input type="number" inputmode="numeric" data-field="sort_order" placeholder="e.g. 10">
+      <div class="hint">Lower numbers print first. Leave gaps (10, 20, 30…) so a new driver can be
+        slotted in without renumbering everyone. Their route comes from the vehicle above.</div>
+    </div>
+
+    <button class="btn" id="drvSaveBtn" onclick="saveDriver()">Add driver</button>
+    <div class="editbar" id="drvRetireBar">
+      <button class="btn danger" onclick="retireDrv()">Retire this driver</button>
+    </div>
+    <button class="btn ghost" style="margin-top:10px" onclick="backToDrvList()">Back to list</button>
+    <div class="hint" id="drvEditedHint"></div>
+  </div>
+</div>

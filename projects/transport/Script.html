@@ -1,0 +1,1173 @@
+<script>
+  var BOOT = null, CUR = '₹';
+  var ADMIN = { token: null, name: null };
+  var VEHICLES = [], DRIVERS = [], FIXROWS = [], FIXTYPE = 'fuel';
+  var EDITV = null, EDITD = null, EDITE = null; // ids currently being edited
+  var PRESET = document.body.getAttribute('data-preset') || ''; // vehicle from a QR sticker
+
+  var ADMIN_VIEWS = ['doc', 'vehicles', 'drivers', 'fix', 'dashboard', 'attendance'];
+  var TITLES = {
+    home:'Fleet Tracker', fuel:'Add Fuel', maint:'Add Maintenance', trip:'Add Trip',
+    doc:'Documents', vehicles:'Vehicles', drivers:'Drivers', fix:'Fix Entries',
+    dashboard:'Dashboard', attendance:'Attendance', adminlogin:'Admin'
+  };
+  var ATT = null, ATTMONTH = null, EDITR = null;
+
+  function el(id){ return document.getElementById(id); }
+  function qsa(sel, root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function pad(n){ return (n<10?'0':'')+n; }
+
+  // ---- Generic server call (any number of args) ----------------------------
+  function call(fn, args, cb){
+    var runner = google.script.run
+      .withSuccessHandler(function(res){ cb(res); })
+      .withFailureHandler(function(e){ toast((e&&e.message)||'Server error', true); });
+    runner[fn].apply(runner, args||[]);
+  }
+  // Standard handling of an admin server result (re-login / error / ok).
+  function handleAdminRes(res, onOk){
+    if(res && res.relogin){ clearAdmin(); toast(res.error||'Session locked', true); show('adminlogin'); return; }
+    if(res && res.ok){ if(res.message) toast(res.message); onOk && onOk(res); }
+    else { toast((res && res.error) || 'Something went wrong', true); }
+  }
+
+  // ---- Boot ----------------------------------------------------------------
+  window.onload = function(){
+    google.script.run.withSuccessHandler(onBoot).withFailureHandler(function(e){
+      el('barSub').textContent = 'Could not load';
+      toast(e.message || 'Failed to load data', true);
+    }).getBootstrap();
+  };
+  function onBoot(d){
+    BOOT = d;
+    CUR = (d.settings && d.settings.currency_symbol) || '₹';
+    el('barTitle').textContent = (d.settings && d.settings.app_title) || 'Fleet Tracker';
+    el('barSub').textContent = (d.vehicles.length) + ' vehicles · tap a tile to begin';
+    populateAll(); setToday(); applyPreset(); restoreAdmin(); show('home');
+    updateQueueBanner(); trySendQueue(true); // send anything saved offline last time
+    if(PRESET){
+      var pv = BOOT.vehicles.filter(function(v){ return v.vehicle_id===PRESET; })[0];
+      if(pv) el('barSub').textContent = '🚌 ' + pv.reg_no + ' preset · tap a tile to begin';
+    }
+  }
+
+  // Pre-select the QR sticker's vehicle in the three entry forms.
+  function applyPreset(){
+    if(!PRESET) return;
+    ['fuel','maint','trip'].forEach(function(t){
+      var s = el('form-'+t).querySelector('.js-vehicle');
+      if(s && optionExists(s, PRESET) && !s.value){ s.value = PRESET; onVehicleChange(t); }
+    });
+  }
+
+  // ---- Admin session -------------------------------------------------------
+  function restoreAdmin(){
+    var s = null;
+    try { s = JSON.parse(sessionStorage.getItem('fleet_admin') || 'null'); } catch(e){}
+    if(s && s.token){
+      call('adminPing', [s.token], function(res){
+        if(res && res.ok) setAdmin(s.token, res.name); else clearAdmin();
+      });
+    } else clearAdmin();
+  }
+  function setAdmin(token, name){
+    ADMIN = { token: token, name: name };
+    try { sessionStorage.setItem('fleet_admin', JSON.stringify(ADMIN)); } catch(e){}
+    document.body.classList.add('is-admin');
+    var b = el('lockBtn'); b.textContent = '🔓'; b.classList.add('on'); b.title = 'Admin: ' + name;
+    el('adminHint').textContent = 'Admin unlocked — ' + name + '. Tap the lock to step out.';
+  }
+  function clearAdmin(){
+    ADMIN = { token: null, name: null };
+    try { sessionStorage.removeItem('fleet_admin'); } catch(e){}
+    document.body.classList.remove('is-admin');
+    var b = el('lockBtn'); b.textContent = '🔒'; b.classList.remove('on'); b.title = 'Admin';
+    el('adminHint').innerHTML = 'Tap the <b>🔒 lock</b> (top-right) to unlock admin tools.';
+  }
+  function lockTap(){
+    if(ADMIN.token){
+      if(confirm('Lock admin tools now?')){
+        call('adminLogout', [ADMIN.token], function(){});
+        clearAdmin(); toast('Locked'); goHome();
+      }
+    } else show('adminlogin');
+  }
+  function doLogin(){
+    var name = el('login-name').value, pin = el('login-pin').value;
+    if(!pin){ toast('Enter the PIN', true); return; }
+    call('adminLogin', [pin, name], function(res){
+      if(res && res.ok){ setAdmin(res.token, res.name); el('login-pin').value=''; toast('Welcome, ' + res.name); goHome(); }
+      else toast((res && res.error) || 'Could not unlock', true);
+    });
+  }
+
+  // ---- Navigation ----------------------------------------------------------
+  function show(view){
+    if(ADMIN_VIEWS.indexOf(view) >= 0 && !ADMIN.token) view = 'adminlogin';
+    qsa('.view').forEach(function(v){ v.classList.remove('active'); });
+    el('view-' + view).classList.add('active');
+    el('barTitle').textContent = TITLES[view] || 'Fleet Tracker';
+    el('backBtn').style.display = (view==='home') ? 'none' : 'block';
+    el('barSub').style.display = (view==='home') ? 'block' : 'none';
+    window.scrollTo(0,0);
+    if(view==='home')       renderStateBanner();
+    if(view==='dashboard') { loadDashboard(); rptInit(); }
+    if(view==='attendance') attInit();
+    if(view==='vehicles')  loadVehicles();
+    if(view==='drivers')   loadDrivers();
+    if(view==='fix')       loadFix();
+  }
+  function goHome(){ show('home'); }
+
+  // ---- Populate dropdowns --------------------------------------------------
+  function fillSelect(sel, items, placeholder){
+    var html = '';
+    if(placeholder!=null) html += '<option value="">'+esc(placeholder)+'</option>';
+    items.forEach(function(it){ html += '<option value="'+esc(it.value)+'">'+esc(it.label)+'</option>'; });
+    sel.innerHTML = html;
+  }
+  // Off-road / no-odometer vehicles stay pickable — a bus at the garage still
+  // gets fuelled. They are tagged so nobody picks one without noticing.
+  function vehLabel(v){
+    return v.reg_no + (v.make_model ? ' — '+v.make_model : '') +
+           (v.off_road ? ' 🔧 off road' : '') + (v.odo_working===false ? ' 🚫 no odometer' : '');
+  }
+  function vehById(id){
+    var list = (BOOT && BOOT.vehicles) || [];
+    for(var i=0;i<list.length;i++) if(list[i].vehicle_id===id) return list[i];
+    return null;
+  }
+  function populateAll(){
+    var vehicles = BOOT.vehicles.map(function(v){ return { value:v.vehicle_id, label: vehLabel(v) }; });
+    var drivers  = BOOT.drivers.map(function(d){ return { value:d.driver_id, label:d.name }; });
+    var staff    = BOOT.staff.map(function(s){ return { value:s, label:s }; });
+    qsa('.js-vehicle').forEach(function(s){ fillSelect(s, vehicles, '— select vehicle —'); });
+    qsa('.js-driver').forEach(function(s){ fillSelect(s, drivers, '— none —'); });
+    qsa('.js-staff').forEach(function(s){ fillSelect(s, staff, '— who? —'); });
+    qsa('.js-choice').forEach(function(s){
+      var key = s.getAttribute('data-choice');
+      var list = (BOOT.choices[key]||[]).map(function(v){ return {value:v,label:v}; });
+      fillSelect(s, list, null);
+    });
+  }
+  // Re-reads vehicles/drivers and puts every entry form back the way it was.
+  // Deliberately does NOT reset the date fields — this runs while a form may be
+  // half-filled, and silently jumping a back-dated entry to today loses work.
+  function refreshBoot(then){
+    var keep = {};
+    ['fuel','maint','trip'].forEach(function(t){
+      var s = el('form-'+t) && el('form-'+t).querySelector('.js-vehicle');
+      if(s) keep[t] = s.value;
+    });
+    google.script.run.withSuccessHandler(function(d){
+      BOOT = d; populateAll();
+      ['fuel','maint','trip'].forEach(function(t){
+        var s = el('form-'+t) && el('form-'+t).querySelector('.js-vehicle');
+        if(s && keep[t] && optionExists(s, keep[t])) s.value = keep[t];
+        applyOdoState(t); offRoadNudge(t);
+      });
+      renderStateBanner();
+      el('barSub').textContent = d.vehicles.length + ' vehicles · tap a tile to begin';
+      if(then) then();
+    }).getBootstrap();
+  }
+  function todayIso(){
+    var t = new Date(); return t.getFullYear()+'-'+pad(t.getMonth()+1)+'-'+pad(t.getDate());
+  }
+  function setToday(){
+    var iso = todayIso();
+    qsa('.js-today').forEach(function(i){ i.value = iso; });
+  }
+
+  // ---- Read / reset / fill a form ------------------------------------------
+  function readForm(rootId){
+    var root = el(rootId), out = {};
+    qsa('[data-field]', root).forEach(function(i){
+      var key = i.getAttribute('data-field');
+      if(i.getAttribute('data-type')==='bool') out[key] = i.checked ? 'Yes' : 'No';
+      else out[key] = (i.value||'').trim();
+    });
+    return out;
+  }
+  function resetForm(rootId){
+    qsa('[data-field]', el(rootId)).forEach(function(i){
+      // Switches default to on (e.g. "filled to full") unless marked otherwise.
+      if(i.getAttribute('data-type')==='bool') i.checked = i.getAttribute('data-default')!=='off';
+      else if(i.tagName==='SELECT') i.selectedIndex = 0;
+      else i.value = '';
+    });
+    setToday();
+  }
+  function fillForm(rootId, row){
+    qsa('[data-field]', el(rootId)).forEach(function(i){
+      var k = i.getAttribute('data-field'), v = row[k];
+      if(i.getAttribute('data-type')==='bool'){ i.checked = String(v).toLowerCase().indexOf('y')===0; }
+      else if(i.tagName==='SELECT'){
+        if(v!=null && v!=='' && !optionExists(i, v)){ var o=document.createElement('option'); o.value=v; o.textContent=v; i.appendChild(o); }
+        i.value = (v==null?'':v);
+      } else i.value = (v==null?'':v);
+    });
+  }
+  function optionExists(sel, val){
+    return Array.prototype.some.call(sel.options, function(o){ return o.value===String(val); });
+  }
+
+  // ---- Live helpers (entry forms) ------------------------------------------
+
+  /**
+   * Show or hide the odometer inputs for whichever vehicle is picked.
+   * A vehicle whose meter is out of action is never asked for a reading —
+   * that is the whole point of the flag. Returns true if the meter works.
+   */
+  function applyOdoState(which){
+    var root = el('form-'+which); if(!root) return true;
+    var sel = root.querySelector('.js-vehicle');
+    var v = sel ? vehById(sel.value) : null;
+    // A consumable has no reading to take, same as a dead meter.
+    var prod = root.querySelector('[data-field="product"]');
+    var consumable = !!prod && prod.value && prod.value!=='Diesel' && prod.value!=='Petrol';
+    var works = (!v || v.odo_working !== false) && !consumable;
+    var fields = ['odometer','open_odo','close_odo'].map(function(k){
+      return root.querySelector('[data-field="'+k+'"]');
+    }).filter(Boolean);
+    // When correcting an old entry, a reading on screen was taken before the
+    // meter broke — keep it visible, or saving would erase it. On a new entry
+    // there is nothing worth keeping, so clear and hide.
+    var editing = !!(EDITE && EDITE.type===which);
+    var keep = editing && fields.some(function(i){ return i.value !== ''; });
+    var visible = works || keep;
+    if(!works && !keep) fields.forEach(function(i){ i.value = ''; });
+
+    qsa('.js-odo-field', root).forEach(function(f){ f.style.display = visible ? '' : 'none'; });
+    qsa('.js-odo-label', root).forEach(function(l){ l.classList.toggle('req', works); });
+    if(!visible && which==='trip' && el('tripDist'))
+      el('tripDist').textContent = 'No distance — this vehicle’s odometer is not working.';
+    var tog = root.querySelector('.js-odo-toggle');
+    if(tog){
+      tog.style.display = v ? '' : 'none';
+      tog.textContent = works ? 'Odometer not working?' : 'Odometer fixed?';
+    }
+    return works;
+  }
+
+  /** The gentle nudge when the picked bus is already marked off road. */
+  function offRoadNudge(which){
+    var box = el('orNudge-'+which); if(!box) return;
+    var root = el('form-'+which); if(!root) return;
+    var sel = root.querySelector('.js-vehicle');
+    var v = sel ? vehById(sel.value) : null;
+    if(!v || !v.off_road){ box.innerHTML = ''; showOffRoadToggle(true); return; }
+    var age = (v.off_road_days==null) ? '' :
+      v.off_road_days + ' day' + (v.off_road_days===1?'':'s') + ' · since ' + esc(v.off_road_since);
+    box.innerHTML =
+      '<div class="sbanner" style="margin-bottom:14px"><div class="srow" style="margin-top:0">'+
+        '<div style="min-width:0"><div class="snm">🔧 Marked off road</div>'+
+        '<div class="ssub">'+age+'</div></div>'+
+        '<button class="btn small" onclick="backOnRoad(\''+esc(v.vehicle_id)+'\')">Back on road</button>'+
+      '</div></div>';
+    showOffRoadToggle(false);
+  }
+  /** The maintenance form's off-road switch: pointless if it is already off road. */
+  function showOffRoadToggle(on){
+    var f = el('offRoadField'); if(!f) return;
+    var editing = !!(EDITE && EDITE.type==='maint');
+    f.style.display = (on && !editing) ? '' : 'none';
+    if(!on || editing){ var c = el('maint-offroad'); if(c) c.checked = false; }
+  }
+
+  function onVehicleChange(which){
+    var root = el('form-'+which);
+    var sel = root.querySelector('.js-vehicle'), hint = el('odoHint-'+which);
+    var works = applyOdoState(which);
+    offRoadNudge(which);
+    if(!sel.value){ if(hint) hint.textContent=''; return; }
+    // Auto-pick the driver assigned to this vehicle (still changeable).
+    var drv = root.querySelector('.js-driver');
+    if(drv && !drv.value){
+      var match = BOOT.drivers.filter(function(d){ return d.assigned_vehicle===sel.value; })[0];
+      if(match && optionExists(drv, match.driver_id)) drv.value = match.driver_id;
+    }
+    if(!works){
+      var v = vehById(sel.value);
+      if(hint) hint.innerHTML = '🚫 Odometer not working on this bus' +
+        (v && v.odo_broken_since ? ' since ' + esc(v.odo_broken_since) : '') +
+        ' — save without a reading. Tap “Odometer fixed?” when it is repaired.';
+      return;
+    }
+    if(hint) hint.textContent = 'Checking last reading…';
+    google.script.run.withSuccessHandler(function(last){
+      if(hint) hint.textContent = last==null ? 'No previous reading for this vehicle yet.'
+                                    : 'Last recorded odometer: ' + Number(last).toLocaleString() + ' km';
+      // On the trip form, pre-fill the opening odometer with the last known reading.
+      if(which==='trip' && last!=null){
+        var o = root.querySelector('[data-field="open_odo"]');
+        if(o && !o.value){ o.value = last; tripDistance(); }
+      }
+    }).getLastOdometer(sel.value);
+  }
+  function tripDistance(){
+    var o = parseFloat(el('form-trip').querySelector('[data-field="open_odo"]').value);
+    var c = parseFloat(el('form-trip').querySelector('[data-field="close_odo"]').value);
+    var box = el('tripDist');
+    if(!isNaN(o) && !isNaN(c)) box.textContent = (c>=o) ? ('Distance: '+(c-o).toLocaleString()+' km') : 'Closing must be ≥ opening.';
+    else box.textContent = 'Distance will show here.';
+  }
+
+  // ---- Confirm sheet ---------------------------------------------------------
+  // One small dialog reused by "back on road" and the odometer flags, so those
+  // actions never take the in-charge away from the screen they are on.
+  var DLG_OK = null, DLG_SINCE = '';
+  function openDlg(title, bodyHtml, okLabel, onConfirm){
+    el('dlgTitle').textContent = title;
+    el('dlgBody').innerHTML = bodyHtml;
+    el('dlgOk').textContent = okLabel || 'Confirm';
+    DLG_OK = onConfirm;
+    el('dlgWrap').classList.add('show');
+  }
+  function closeDlg(){ el('dlgWrap').classList.remove('show'); DLG_OK = null; DLG_SINCE = ''; }
+  function dlgConfirm(){ if(DLG_OK) DLG_OK(); }   // the handler closes on success
+
+  // ---- Off road / back on road ----------------------------------------------
+  function backOnRoad(id){
+    call('getOffRoadInfo', [id], function(res){
+      if(!res || !res.ok){ toast((res && res.error) || 'Could not read that vehicle', true); refreshBoot(); return; }
+      DLG_SINCE = res.since || '';
+      openDlg('Back on road — ' + res.reg_no,
+        '<p class="muted" style="margin-top:0">Off road since <b>'+esc(res.since_label||'—')+'</b>.</p>'+
+        '<div class="two">'+
+          '<div class="field"><label>Back on road</label>'+
+            '<input type="date" id="orDate" value="'+todayIso()+'" onchange="orRecount()"></div>'+
+          '<div class="field"><label>Days off road</label>'+
+            '<input type="number" inputmode="numeric" id="orDays" value="'+(res.days==null?'':res.days)+'"></div>'+
+        '</div>'+
+        '<div class="hint">'+(res.job_label
+          ? 'Recorded against “'+esc(res.job_label)+'”. Change the number if that is not right.'
+          : 'There is no maintenance entry to record this against yet — add one and the days will count.')+'</div>',
+        'Back on road',
+        function(){
+          call('setVehicleOnRoad', [{ vehicle_id:id, date:el('orDate').value,
+                                      downtime_days:el('orDays').value, entered_by:lastEnteredBy() }],
+            function(r){
+              if(r && r.ok){ toast(r.message); closeDlg(); refreshBoot(); }
+              else toast((r && r.error) || 'Could not update', true);
+            });
+        });
+    });
+  }
+  function orRecount(){
+    if(!DLG_SINCE || !el('orDate').value) return;
+    var days = Math.round((new Date(el('orDate').value+'T00:00:00') -
+                           new Date(DLG_SINCE+'T00:00:00')) / 86400000);
+    if(!isNaN(days) && days>=0) el('orDays').value = days;
+  }
+
+  // ---- Odometer working / not working ---------------------------------------
+  function odoToggle(which){
+    var sel = el('form-'+which).querySelector('.js-vehicle');
+    if(!sel || !sel.value){ toast('Pick a vehicle first', true); return; }
+    var v = vehById(sel.value);
+    if(v && v.odo_working === false) odoFixedDlg(sel.value, which);
+    else odoBrokenDlg(sel.value, which);
+  }
+  function odoBrokenDlg(id, which){
+    var v = vehById(id) || {};
+    openDlg('Odometer not working — ' + (v.reg_no || id),
+      '<p class="muted" style="margin-top:0">Fuel, maintenance and trips carry on being logged for this vehicle. '+
+      'Its distance, cost/km and km/L pause until the meter is fixed — better a gap than a made-up number.</p>'+
+      '<div class="field"><label>Stopped working on</label>'+
+        '<input type="date" id="odoDate" value="'+todayIso()+'"></div>'+
+      '<div class="field"><label>Note</label>'+
+        '<input type="text" id="odoNote" placeholder="optional — e.g. cable snapped"></div>',
+      'Mark not working',
+      function(){
+        call('markOdometerBroken', [{ vehicle_id:id, date:el('odoDate').value,
+                                      note:el('odoNote').value, entered_by:lastEnteredBy() }],
+          function(r){ afterOdoChange(r, which); });
+      });
+  }
+  function odoFixedDlg(id, which){
+    var v = vehById(id) || {};
+    openDlg('Odometer fixed — ' + (v.reg_no || id),
+      '<p class="muted" style="margin-top:0">What does the meter read today? That number is where this vehicle '+
+      'starts counting again. If it reads lower than before, we treat it as a replacement meter and count '+
+      'afresh from there — the old readings stay on record.</p>'+
+      '<div class="two">'+
+        '<div class="field"><label>Working again from</label>'+
+          '<input type="date" id="odoDate" value="'+todayIso()+'"></div>'+
+        '<div class="field"><label class="req">Reads now (km)</label>'+
+          '<input type="number" inputmode="numeric" id="odoRead" placeholder="e.g. 0"></div>'+
+      '</div>',
+      'Mark working',
+      function(){
+        if(el('odoRead').value === ''){ toast('Enter what the odometer reads now', true); return; }
+        call('markOdometerWorking', [{ vehicle_id:id, date:el('odoDate').value,
+                                       reading:el('odoRead').value, entered_by:lastEnteredBy() }],
+          function(r){ afterOdoChange(r, which); });
+      });
+  }
+  function afterOdoChange(r, which){
+    if(!r || !r.ok){ toast((r && r.error) || 'Could not update', true); return; }
+    toast(r.message); closeDlg();
+    refreshBoot(function(){ if(which) onVehicleChange(which); });
+  }
+
+  // ---- Remembered defaults (per phone) --------------------------------------
+  function getPrefs(){ try{ return JSON.parse(localStorage.getItem('fleet_prefs')||'{}'); }catch(e){ return {}; } }
+  function lastEnteredBy(){ return getPrefs().entered_by || ''; }
+  function savePrefs(data){
+    try{
+      var p = getPrefs();
+      if(data.entered_by) p.entered_by = data.entered_by;
+      if(data.paid_by) p.paid_by = data.paid_by;
+      localStorage.setItem('fleet_prefs', JSON.stringify(p));
+    }catch(e){}
+  }
+  function applyPrefs(rootId){
+    var p = getPrefs();
+    qsa('[data-field]', el(rootId)).forEach(function(i){
+      var k = i.getAttribute('data-field');
+      if((k==='entered_by'||k==='paid_by') && p[k] && optionExists(i, p[k]) && !i.value) i.value = p[k];
+    });
+  }
+
+  // ---- Auto-litres from the amount (uses fuel_price_per_litre setting) ------
+  function litresTouched(inp){ inp.removeAttribute('data-auto'); }
+  function autoLitres(){
+    var price = parseFloat(BOOT && BOOT.settings && BOOT.settings.fuel_price_per_litre);
+    if(isNaN(price) || price<=0) return;
+    var root = el('form-fuel');
+    var lit = root.querySelector('[data-field="litres"]');
+    var hint = el('litresHint');
+    if(lit.value && !lit.getAttribute('data-auto')) return; // the user typed litres themselves
+    var amt = parseFloat(root.querySelector('[data-field="amount"]').value);
+    if(isNaN(amt) || amt<=0){
+      if(lit.getAttribute('data-auto')){ lit.value=''; lit.removeAttribute('data-auto'); if(hint) hint.textContent=''; }
+      return;
+    }
+    lit.value = (amt/price).toFixed(2);
+    lit.setAttribute('data-auto','1');
+    if(hint) hint.textContent = 'Litres worked out at '+CUR+price+'/L — edit if the pump shows different.';
+  }
+
+  // ---- Fuel: product and bill number ----------------------------------------
+  // AdBlue and the like are bought against the same voucher as a fill, but they
+  // do not move the bus — so no reading is asked for and they never reach km/L.
+  function onProductChange(){
+    var root = el('form-fuel');
+    var sel = root.querySelector('[data-field="product"]');
+    var product = sel ? sel.value : 'Diesel';
+    var propellant = (product==='Diesel' || product==='Petrol' || !product);
+    var hint = el('productHint');
+    qsa('.js-odo-field', root).forEach(function(f){
+      if(!propellant) f.style.display = 'none';
+    });
+    if(propellant){ applyOdoState('fuel'); if(hint) hint.textContent=''; }
+    else {
+      var o = root.querySelector('[data-field="odometer"]'); if(o) o.value='';
+      var full = el('fuel-full'); if(full) full.checked = false;
+      if(hint) hint.textContent = product + ' counts toward spend, but not toward km/L — no reading needed.';
+    }
+  }
+  function suggestBillNo(){
+    var b = el('form-fuel').querySelector('[data-field="bill_no"]');
+    var hint = el('billHint');
+    if(!b || b.value) return;
+    if(BOOT && BOOT.nextBillNo){
+      b.value = BOOT.nextBillNo;
+      if(hint) hint.textContent = 'Next in the series — change it if the voucher says otherwise.';
+    } else if(hint) hint.textContent = '';
+  }
+
+  // ---- Adding / editing log entries ----------------------------------------
+  function openAdd(type){
+    EDITE = null; resetForm('form-'+type);
+    if(type==='fuel'){
+      var lit = el('form-fuel').querySelector('[data-field="litres"]');
+      lit.removeAttribute('data-auto'); el('litresHint').textContent='';
+      el('productHint').textContent=''; el('billHint').textContent='';
+      suggestBillNo();
+      var st = el('form-fuel').querySelector('[data-field="station"]');
+      if(st && !st.value && BOOT && BOOT.settings) st.value = BOOT.settings.fuel_report_station || '';
+    }
+    if(type==='trip') el('tripDist').textContent = 'Distance will show here.';
+    applyPrefs('form-'+type); applyPreset();
+    setEntryMode(type, 'add');
+    applyOdoState(type); offRoadNudge(type);
+    show(type);
+  }
+  function setEntryMode(type, mode, voided){
+    var save = el('savebtn-'+type), bar = el('editbar-'+type), vb = el('voidbtn-'+type);
+    if(mode==='edit'){
+      save.textContent = 'Update entry';
+      bar.classList.add('show');
+      if(vb) vb.textContent = voided ? 'Restore entry' : 'Void this entry';
+    } else {
+      save.textContent = type==='fuel' ? 'Save fuel entry' : type==='maint' ? 'Save maintenance' : 'Save trip';
+      bar.classList.remove('show');
+    }
+    // Taking a bus off road belongs on a new entry, not while correcting an old one.
+    if(type==='maint') showOffRoadToggle(mode!=='edit');
+  }
+  function addEntry(type, fn, data){
+    google.script.run
+      .withSuccessHandler(function(res){
+        if(res && res.ok){
+          toast(res.message); savePrefs(data); resetForm('form-'+type); EDITE=null; setEntryMode(type,'add');
+          // Taking a bus off road changes the fleet's state — reload it so the
+          // home banner and the pickers agree with what just happened.
+          if(data.off_road==='Yes') refreshBoot();
+          goHome();
+        }
+        else if(res && /save anyway/i.test(res.error||'')){
+          if(confirm(res.error + '\n\nSave anyway?')){ data.override = true; addEntry(type, fn, data); }
+        } else toast((res && res.error) || 'Could not save', true);
+      })
+      .withFailureHandler(function(){
+        // No signal (or server hiccup): keep the entry on this phone and retry later.
+        queueEntry(fn, type, data);
+        toast('No signal — entry saved on this phone. Tap the yellow banner to send it later.', true);
+        resetForm('form-'+type); EDITE=null; setEntryMode(type,'add'); goHome();
+      })[fn](data);
+  }
+
+  // ---- Offline queue ---------------------------------------------------------
+  function getQueue(){ try{ return JSON.parse(localStorage.getItem('fleet_queue')||'[]'); }catch(e){ return []; } }
+  function setQueue(q){ try{ localStorage.setItem('fleet_queue', JSON.stringify(q)); }catch(e){} }
+  function queueEntry(fn, type, data){
+    var q = getQueue(); q.push({ fn:fn, type:type, data:data, ts:Date.now() }); setQueue(q); updateQueueBanner();
+  }
+  // ---- Home screen: what is off road, and whose meter is dead ---------------
+  function renderStateBanner(){
+    var b = el('stateBanner'); if(!b || !BOOT) return;
+    var off   = BOOT.vehicles.filter(function(v){ return v.off_road; });
+    var noOdo = BOOT.vehicles.filter(function(v){ return v.odo_working === false; });
+    var h = '';
+    if(off.length){
+      h += '<div class="sbanner"><div class="sttl">🔧 Off road ('+off.length+')</div>';
+      off.forEach(function(v){
+        h += '<div class="srow"><div style="min-width:0">'+
+             '<div class="snm">'+esc(v.reg_no||v.vehicle_id)+'</div><div class="ssub">'+
+             (v.off_road_days==null ? 'since —'
+               : v.off_road_days+' day'+(v.off_road_days===1?'':'s')+' · since '+esc(v.off_road_since))+
+             '</div></div>'+
+             '<button class="btn small" onclick="backOnRoad(\''+esc(v.vehicle_id)+'\')">Back on road</button></div>';
+      });
+      h += '</div>';
+    }
+    if(noOdo.length){
+      h += '<div class="sbanner"><div class="sttl">🚫 Odometer not working ('+noOdo.length+')</div>';
+      noOdo.forEach(function(v){
+        h += '<div class="srow"><div style="min-width:0">'+
+             '<div class="snm">'+esc(v.reg_no||v.vehicle_id)+'</div><div class="ssub">'+
+             (v.odo_broken_days==null ? 'no km being recorded'
+               : v.odo_broken_days+' day'+(v.odo_broken_days===1?'':'s')+' · no km being recorded')+
+             '</div></div>'+
+             '<button class="btn small ghost" onclick="odoFixedDlg(\''+esc(v.vehicle_id)+'\', null)">Fixed</button></div>';
+      });
+      h += '</div>';
+    }
+    b.innerHTML = h;
+  }
+
+  function updateQueueBanner(){
+    var q = getQueue(), b = el('queueBanner');
+    if(!b) return;
+    if(!q.length){ b.style.display='none'; return; }
+    b.style.display='block';
+    b.textContent = '📤 ' + q.length + ' entr' + (q.length===1?'y':'ies') + ' saved offline — tap to send now';
+  }
+  function trySendQueue(silent){
+    var q = getQueue(); updateQueueBanner();
+    if(!q.length) return;
+    var item = q[0];
+    google.script.run
+      .withSuccessHandler(function(res){
+        var q2 = getQueue(); q2.shift(); setQueue(q2);
+        if(res && res.ok){ if(!silent) toast(res.message); }
+        else toast('A saved-offline entry could not be added ('+((res&&res.error)||'error')+'). Please re-enter it.', true);
+        trySendQueue(silent); // next one
+      })
+      .withFailureHandler(function(){
+        updateQueueBanner();
+        if(!silent) toast('Still no signal — your entries are kept safe on this phone.', true);
+      })[item.fn](item.data);
+  }
+  function saveFuel(){
+    var data = readForm('form-fuel');
+    if(EDITE && EDITE.type==='fuel') return updateEntry('fuel', data);
+    addEntry('fuel', 'addFuel', data);
+  }
+  function saveMaint(){
+    var data = readForm('form-maint');
+    if(EDITE && EDITE.type==='maint') return updateEntry('maint', data);
+    addEntry('maint', 'addMaintenance', data);
+  }
+  function saveTrip(){
+    var data = readForm('form-trip');
+    if(EDITE && EDITE.type==='trip') return updateEntry('trip', data);
+    addEntry('trip', 'addTrip', data);
+  }
+  function updateEntry(type, data){
+    call('updateEntry', [ADMIN.token, type, EDITE.id, data], function(res){
+      handleAdminRes(res, function(){ EDITE=null; setEntryMode(type,'add'); resetForm('form-'+type); show('fix'); });
+    });
+  }
+  function voidCurrent(type){
+    if(!EDITE) return;
+    var makeVoid = !EDITE.voided;
+    if(makeVoid && !confirm('Void this entry? It stays on record but is left out of the figures.')) return;
+    call('voidEntry', [ADMIN.token, type, EDITE.id, makeVoid], function(res){
+      handleAdminRes(res, function(){ EDITE=null; setEntryMode(type,'add'); resetForm('form-'+type); show('fix'); });
+    });
+  }
+
+  // ---- Documents -----------------------------------------------------------
+  function saveDoc(){
+    var data = readForm('form-doc');
+    call('addDocument', [ADMIN.token, data], function(res){
+      handleAdminRes(res, function(){ resetForm('form-doc'); goHome(); });
+    });
+  }
+
+  // ---- Vehicles (admin) ----------------------------------------------------
+  function loadVehicles(){
+    showVehEditor(false); el('vehList').innerHTML = '<div class="loading">Loading…</div>';
+    call('listVehicles', [ADMIN.token], function(res){
+      handleAdminRes(res, function(){ VEHICLES = res.rows; renderVehList(); });
+    });
+  }
+  function renderVehList(){
+    var q = (el('vehSearch').value||'').toLowerCase();
+    var rows = VEHICLES.filter(function(v){ return (v.reg_no+' '+(v.make_model||'')).toLowerCase().indexOf(q) >= 0; });
+    if(!rows.length){ el('vehList').innerHTML = '<div class="muted">No vehicles found.</div>'; return; }
+    el('vehList').innerHTML = rows.map(function(v){
+      var st = v.status || 'Active', low = st.toLowerCase();
+      var cls = low==='retired' ? 'retired' : low==='under maintenance' ? 'offroad' : 'active';
+      var noOdo = String(v.odo_working||'Yes').toLowerCase().indexOf('n')===0;
+      return '<div class="listrow" onclick="openVehEdit(\''+esc(v.vehicle_id)+'\')">'+
+        '<div class="main"><div class="ttl">'+esc(v.reg_no||v.vehicle_id)+'</div>'+
+        '<div class="meta">'+esc(v.make_model||'')+(v.type?(' · '+esc(v.type)):'')+'</div></div>'+
+        (noOdo ? '<span class="pill noodo">🚫 no odo</span>' : '')+
+        '<span class="pill '+cls+'">'+esc(st)+'</span></div>';
+    }).join('');
+  }
+  /** Keep the off-road / odometer dates in step with the two dropdowns above them. */
+  function vehStatusChanged(){
+    var root = el('form-vehicle');
+    var off = (root.querySelector('[data-field="status"]').value||'').toLowerCase()==='under maintenance';
+    var since = root.querySelector('[data-field="off_road_since"]');
+    if(since) since.value = off ? (since.value || todayIso()) : '';
+    el('vehStatusHint').textContent = off
+      ? 'Off road: left out of the service-due and no-recent-entries checks, and shown on the home screen.'
+      : '';
+  }
+  function vehOdoChanged(){
+    var root = el('form-vehicle');
+    var works = String(root.querySelector('[data-field="odo_working"]').value||'Yes').toLowerCase().indexOf('n')!==0;
+    var since = root.querySelector('[data-field="odo_broken_since"]');
+    if(since) since.value = works ? '' : (since.value || todayIso());
+    // A reading is only wanted when switching a broken meter back on.
+    var cur = EDITV && VEHICLES.filter(function(x){ return x.vehicle_id===EDITV; })[0];
+    var wasBroken = !!cur && String(cur.odo_working||'Yes').toLowerCase().indexOf('n')===0;
+    el('vehOdoReadingField').style.display = (works && wasBroken) ? '' : 'none';
+  }
+  function vehPane(which){
+    el('vehListWrap').style.display   = which==='list'   ? 'block' : 'none';
+    el('vehEditorWrap').style.display = which==='editor' ? 'block' : 'none';
+    el('vehQrWrap').style.display     = which==='qr'     ? 'block' : 'none';
+    window.scrollTo(0,0);
+  }
+  function showVehEditor(on){ vehPane(on ? 'editor' : 'list'); }
+
+  function openQr(){
+    vehPane('qr');
+    el('qrGrid').innerHTML = '<div class="loading">Loading…</div>';
+    call('getQrList', [ADMIN.token], function(res){
+      handleAdminRes(res, function(){
+        var sep = res.url.indexOf('?') >= 0 ? '&' : '?';
+        el('qrGrid').innerHTML = res.vehicles.map(function(v){
+          var link = res.url + sep + 'v=' + encodeURIComponent(v.vehicle_id);
+          var img = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(link);
+          return '<div class="qrcard"><img src="'+img+'" alt="QR for '+esc(v.reg_no)+'">'+
+                 '<div class="ttl">'+esc(v.reg_no)+'</div></div>';
+        }).join('') || '<div class="muted">No active vehicles yet.</div>';
+      });
+    });
+  }
+  function openVehAdd(){
+    EDITV = null; resetForm('form-vehicle');
+    el('vehEditorTitle').textContent = 'Add a vehicle';
+    el('vehSaveBtn').textContent = 'Add vehicle';
+    el('vehRetireBar').classList.remove('show'); el('vehEditedHint').textContent = '';
+    el('vehOdoReadingField').style.display = 'none';
+    vehStatusChanged(); vehOdoChanged();
+    showVehEditor(true);
+  }
+  function openVehEdit(id){
+    EDITV = id;
+    var v = VEHICLES.filter(function(x){ return x.vehicle_id===id; })[0]; if(!v) return;
+    fillForm('form-vehicle', v);
+    el('vehEditorTitle').textContent = 'Edit ' + (v.reg_no||id);
+    el('vehSaveBtn').textContent = 'Save changes';
+    el('vehRetireBar').classList.toggle('show', String(v.status).toLowerCase()!=='retired');
+    el('vehEditedHint').textContent = v.edited_by ? ('Last edited by '+v.edited_by+(v.edited_at?(' · '+v.edited_at):'')) : '';
+    vehStatusChanged(); vehOdoChanged();
+    showVehEditor(true);
+  }
+  function saveVehicle(){
+    var data = readForm('form-vehicle');
+    var fn = EDITV ? 'updateVehicle' : 'addVehicle';
+    var args = EDITV ? [ADMIN.token, EDITV, data] : [ADMIN.token, data];
+    call(fn, args, function(res){ handleAdminRes(res, function(){ refreshBoot(); loadVehicles(); }); });
+  }
+  function retireVeh(){
+    if(!EDITV) return;
+    if(!confirm('Retire this vehicle? Its history stays, but it is hidden from the entry pickers.')) return;
+    call('retireVehicle', [ADMIN.token, EDITV], function(res){ handleAdminRes(res, function(){ refreshBoot(); loadVehicles(); }); });
+  }
+  function backToVehList(){ showVehEditor(false); }
+
+  // ---- Drivers (admin) -----------------------------------------------------
+  function loadDrivers(){
+    showDrvEditor(false); el('drvList').innerHTML = '<div class="loading">Loading…</div>';
+    call('listDrivers', [ADMIN.token], function(res){
+      handleAdminRes(res, function(){ DRIVERS = res.rows; renderDrvList(); });
+    });
+  }
+  function renderDrvList(){
+    var q = (el('drvSearch').value||'').toLowerCase();
+    var rows = DRIVERS.filter(function(d){ return String(d.name||'').toLowerCase().indexOf(q) >= 0; });
+    if(!rows.length){ el('drvList').innerHTML = '<div class="muted">No drivers found.</div>'; return; }
+    el('drvList').innerHTML = rows.map(function(d){
+      var st = d.status || 'Active', cls = st.toLowerCase()==='retired' ? 'retired' : 'active';
+      return '<div class="listrow" onclick="openDrvEdit(\''+esc(d.driver_id)+'\')">'+
+        '<div class="main"><div class="ttl">'+esc(d.name||d.driver_id)+'</div>'+
+        '<div class="meta">'+esc(d.phone||'')+(d.licence_no?(' · '+esc(d.licence_no)):'')+'</div></div>'+
+        '<span class="pill '+cls+'">'+esc(st)+'</span></div>';
+    }).join('');
+  }
+  function showDrvEditor(on){
+    el('drvEditorWrap').style.display = on ? 'block' : 'none';
+    el('drvListWrap').style.display = on ? 'none' : 'block';
+    window.scrollTo(0,0);
+  }
+  function openDrvAdd(){
+    EDITD = null; resetForm('form-driver');
+    el('drvEditorTitle').textContent = 'Add a driver';
+    el('drvSaveBtn').textContent = 'Add driver';
+    el('drvRetireBar').classList.remove('show'); el('drvEditedHint').textContent = '';
+    showDrvEditor(true);
+  }
+  function openDrvEdit(id){
+    EDITD = id;
+    var d = DRIVERS.filter(function(x){ return x.driver_id===id; })[0]; if(!d) return;
+    fillForm('form-driver', d);
+    el('drvEditorTitle').textContent = 'Edit ' + (d.name||id);
+    el('drvSaveBtn').textContent = 'Save changes';
+    el('drvRetireBar').classList.toggle('show', String(d.status).toLowerCase()!=='retired');
+    el('drvEditedHint').textContent = d.edited_by ? ('Last edited by '+d.edited_by+(d.edited_at?(' · '+d.edited_at):'')) : '';
+    showDrvEditor(true);
+  }
+  function saveDriver(){
+    var data = readForm('form-driver');
+    var fn = EDITD ? 'updateDriver' : 'addDriver';
+    var args = EDITD ? [ADMIN.token, EDITD, data] : [ADMIN.token, data];
+    call(fn, args, function(res){ handleAdminRes(res, function(){ refreshBoot(); loadDrivers(); }); });
+  }
+  function retireDrv(){
+    if(!EDITD) return;
+    if(!confirm('Retire this driver? Their history stays, but they are hidden from the pickers.')) return;
+    call('retireDriver', [ADMIN.token, EDITD], function(res){ handleAdminRes(res, function(){ refreshBoot(); loadDrivers(); }); });
+  }
+  function backToDrvList(){ showDrvEditor(false); }
+
+  // ---- Fix entries (admin) -------------------------------------------------
+  function setFixType(type){
+    FIXTYPE = type;
+    qsa('#fixSeg .seg-btn').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-type')===type); });
+    loadFix();
+  }
+  function loadFix(){
+    el('fixList').innerHTML = '<div class="loading">Loading…</div>';
+    var veh = el('fixVehicle') ? el('fixVehicle').value : '';
+    call('listEntries', [ADMIN.token, FIXTYPE, veh], function(res){
+      handleAdminRes(res, function(){ FIXROWS = res.rows; renderFixList(); });
+    });
+  }
+  function renderFixList(){
+    if(!FIXROWS.length){ el('fixList').innerHTML = '<div class="muted">No entries here yet.</div>'; return; }
+    el('fixList').innerHTML = FIXROWS.map(function(r, i){
+      var voided = String(r.voided).toLowerCase().indexOf('y')===0;
+      return '<div class="listrow" onclick="openFixRow('+i+')" '+(voided?'style="opacity:.55"':'')+'>'+
+        '<div class="main"><div class="ttl">'+esc(r.reg_no||r.vehicle_id)+'  <span class="meta" style="font-weight:400">'+esc(r.when)+'</span></div>'+
+        '<div class="meta">'+esc(summarizeEntry(FIXTYPE, r))+'</div></div>'+
+        (voided ? '<span class="pill void">Voided</span>' : '<span class="go">›</span>')+'</div>';
+    }).join('');
+  }
+  function summarizeEntry(type, r){
+    if(type==='fuel') return CUR+(r.amount||0)+' · '+(r.odometer||'?')+' km'+(String(r.filled_to_full).toLowerCase().indexOf('y')===0?' · full tank':'');
+    if(type==='maint') return (r.category||'')+' · '+CUR+((+r.parts||0)+(+r.labour||0))+' · '+String(r.description||'').slice(0,30);
+    return (r.purpose||'')+' · '+(r.distance || ((+r.close_odo||0)-(+r.open_odo||0)))+' km';
+  }
+  function openFixRow(i){
+    var r = FIXROWS[i];
+    EDITE = { type: FIXTYPE, id: r.entry_id, voided: String(r.voided).toLowerCase().indexOf('y')===0 };
+    fillForm('form-'+FIXTYPE, r);
+    if(FIXTYPE==='fuel'){
+      var lit = el('form-fuel').querySelector('[data-field="litres"]');
+      lit.removeAttribute('data-auto'); el('litresHint').textContent='';
+      el('productHint').textContent=''; el('billHint').textContent='';
+    }
+    if(FIXTYPE==='trip') tripDistance();
+    setEntryMode(FIXTYPE, 'edit', EDITE.voided);
+    applyOdoState(FIXTYPE); offRoadNudge(FIXTYPE);
+    show(FIXTYPE);
+  }
+
+  // ---- Dashboard -----------------------------------------------------------
+  function loadDashboard(){
+    el('dashBody').innerHTML = '<div class="loading">Crunching the numbers…</div>';
+    call('getDashboardData', [ADMIN.token], function(d){
+      // Session expiry now comes back as the standard relogin contract, so it
+      // routes through handleAdminRes like every other admin call.
+      if(d && d.relogin){ handleAdminRes(d); return; }
+      if(d && d.error){ el('dashBody').innerHTML = '<div class="empty">'+esc(d.error)+'</div>'; return; }
+      renderDashboard(d);
+    });
+  }
+  function renderDashboard(d){
+    var k = d.kpis, h = '';
+    h += '<div class="kpis">';
+    h += kpi('Active vehicles', k.activeVehicles, 't-sky');
+    h += kpi('Off road', k.offRoadCount, k.offRoadCount? 't-butter':'t-mint');
+    h += kpi('Km in '+esc(k.monthLabel), Math.round(k.kmThisMonth).toLocaleString(), 't-mint');
+    h += kpi('Avg cost / km', CUR+k.avgCostPerKm, 't-peach');
+    h += kpi('To watch', k.flaggedCount, k.flaggedCount? 't-pink':'t-mint');
+    h += '</div>';
+    if(k.unmeasuredThisMonth){
+      h += '<div class="muted" style="margin:8px 0 12px">'+k.unmeasuredThisMonth+
+           ' vehicle'+(k.unmeasuredThisMonth===1?'':'s')+' left out of the km and cost/km figures this month — '+
+           'odometer not working.</div>';
+    }
+
+    if(d.offRoad && d.offRoad.length){
+      h += '<div class="card"><h2>🔧 Off road right now</h2>';
+      d.offRoad.forEach(function(o){
+        h += '<div class="doc amber"><div><b>'+esc(o.reg_no)+'</b><div class="d">since '+esc(o.since)+'</div></div>'+
+             '<div><b>'+(o.days==null?'—':o.days+' day'+(o.days===1?'':'s'))+'</b></div></div>';
+      });
+      h += '</div>';
+    }
+
+    if(d.odoDown && d.odoDown.length){
+      h += '<div class="card"><h2>🚫 Odometer not working</h2>'+
+           '<p class="muted" style="margin-top:0">Fuel and maintenance are still being logged. Distance, '+
+           'cost/km and km/L pause for these vehicles until the meter is fixed.</p>';
+      d.odoDown.forEach(function(o){
+        h += '<div class="doc amber"><div><b>'+esc(o.reg_no)+'</b><div class="d">since '+esc(o.since)+'</div></div>'+
+             '<div><b>'+(o.days==null?'—':o.days+' day'+(o.days===1?'':'s'))+'</b></div></div>';
+      });
+      h += '</div>';
+    }
+
+    h += '<div class="card"><h2>🚨 Vehicles to watch</h2>';
+    if(!d.watch.length){ h += '<div class="empty">Nothing flagged — the fleet looks healthy 🎉</div>'; }
+    else d.watch.forEach(function(w){
+      h += '<div class="watch"><div class="r">'+esc(w.reg_no)+'</div><div class="why">';
+      w.reasons.forEach(function(r){ h += '<span class="chip">'+esc(r)+'</span>'; });
+      h += '</div><div class="muted" style="margin-top:8px">cost/km '+CUR+w.recent_cost_per_km+' · '+w.recent_kmpl+' km/L · '+w.recent_downtime+' days off road</div></div>';
+    });
+    if(d.unassessable && d.unassessable.length){
+      h += '<div class="muted" style="margin-top:10px">Could not be assessed — no working odometer for the '+
+           'whole window: '+d.unassessable.map(function(u){ return esc(u.reg_no); }).join(', ')+'.</div>';
+    }
+    h += '</div>';
+
+    h += '<div class="card"><h2>📊 Cost per km (latest month)</h2>';
+    var measured = (d.perVehicle||[]).filter(function(v){ return !v.unmeasured; });
+    var blind    = (d.perVehicle||[]).filter(function(v){ return v.unmeasured; });
+    if(!measured.length && !blind.length){ h += '<div class="muted">No data yet. Add a few fuel and maintenance entries.</div>'; }
+    else {
+      var max = Math.max.apply(null, measured.map(function(v){ return v.cost_per_km; }).concat([0.01]));
+      measured.forEach(function(v){
+        var pct = Math.max(3, Math.round(v.cost_per_km/max*100));
+        h += '<div class="barrow"><div class="nm">'+esc(v.reg_no)+'</div>'+
+             '<div class="bartrack"><div class="barfill" style="width:'+pct+'%"></div></div>'+
+             '<div class="barval">'+CUR+v.cost_per_km+'</div></div>';
+      });
+      // No bar for these — a zero-length bar reads as "free to run".
+      blind.forEach(function(v){
+        h += '<div class="barrow"><div class="nm">'+esc(v.reg_no)+'</div>'+
+             '<div class="muted" style="flex:1">no odometer — not measured</div>'+
+             '<div class="barval">—</div></div>';
+      });
+    }
+    h += '</div>';
+
+    h += '<div class="card"><h2>📄 Documents expiring soon</h2>';
+    if(!d.expiries.length){ h += '<div class="empty">Nothing due in the warning window.</div>'; }
+    else d.expiries.forEach(function(e){
+      var cls = e.daysLeft<0 ? 'red':'amber';
+      var status = e.daysLeft<0 ? 'EXPIRED' : e.daysLeft+' day'+(e.daysLeft===1?'':'s')+' left';
+      h += '<div class="doc '+cls+'"><div><b>'+esc(e.reg_no)+'</b> · '+esc(e.doc_type)+'<div class="d">expires '+esc(e.expiry)+'</div></div><div><b>'+status+'</b></div></div>';
+    });
+    h += '</div>';
+    el('dashBody').innerHTML = h;
+  }
+  function kpi(label, value, cls){
+    return '<div class="kpi '+cls+'"><div class="v">'+esc(value)+'</div><div class="k">'+esc(label)+'</div></div>';
+  }
+
+  // ---- Downloading a file the server built ----------------------------------
+  // The app is open to anyone, so a Drive link the script created would only
+  // prompt an anonymous user to sign in. The bytes come back base64 instead and
+  // the download is assembled here.
+  function downloadB64(b64, filename, mime){
+    try{
+      var bin = atob(b64), n = bin.length, bytes = new Uint8Array(n);
+      for(var i=0;i<n;i++) bytes[i] = bin.charCodeAt(i);
+      var url = URL.createObjectURL(new Blob([bytes], {type: mime || 'application/pdf'}));
+      var a = document.createElement('a');
+      a.href = url; a.download = filename; a.rel = 'noopener';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+      return true;
+    }catch(e){ return false; }
+  }
+  // Some phone browsers block a scripted download inside the app frame. When
+  // that happens the Drive copy is the way out, so offer it rather than failing.
+  function deliverFile(res, mime){
+    var ok = res.b64 && downloadB64(res.b64, res.filename, mime);
+    if(res.message) toast(res.message);
+    if(!ok && res.driveUrl){
+      openDlg('Your file is ready',
+        '<p class="muted" style="margin-top:0">This browser would not start the download by itself. '+
+        'The copy filed in Drive opens fine:</p>'+
+        '<p style="word-break:break-all"><a href="'+esc(res.driveUrl)+'" target="_blank" rel="noopener">'+
+        esc(res.filename)+'</a></p>', 'Done', function(){ closeDlg(); });
+    }
+  }
+
+  // ---- Fuel Process report --------------------------------------------------
+  function rptInit(){
+    if(el('rptFrom').value && el('rptTo').value) return;
+    rptPreset('this');
+  }
+  function rptPreset(which){
+    var now = new Date(), from, to;
+    if(which==='this'){ from = new Date(now.getFullYear(), now.getMonth(), 1); to = now; }
+    else if(which==='last'){
+      from = new Date(now.getFullYear(), now.getMonth()-1, 1);
+      to   = new Date(now.getFullYear(), now.getMonth(), 0);
+    } else { from = new Date(now.getTime() - 6*86400000); to = now; }
+    el('rptFrom').value = isoOf(from); el('rptTo').value = isoOf(to);
+    qsa('#rptQuick .seg-btn').forEach(function(b){ b.classList.remove('active'); });
+    previewReport();
+  }
+  function isoOf(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+
+  function previewReport(){
+    var f = el('rptFrom').value, t = el('rptTo').value;
+    if(!f || !t){ el('rptPreview').textContent = 'Pick both dates.'; el('rptBtn').disabled = true; return; }
+    el('rptPreview').innerHTML = '<div class="loading" style="padding:10px">Checking…</div>';
+    el('rptBtn').disabled = true;
+    call('previewFuelReport', [ADMIN.token, f, t], function(res){
+      handleAdminRes(res, function(){
+        var bits = ['<b>'+res.count+'</b> entr'+(res.count===1?'y':'ies')+' · total '+CUR+res.total.toLocaleString()];
+        if(res.stragglers) bits.push('includes <b>'+res.stragglers+'</b> earlier bill'+(res.stragglers===1?'':'s')+' never reported before');
+        if(res.brokenOdo)  bits.push(res.brokenOdo+' with the speedometer out of action');
+        if(res.missingBill) bits.push('<span style="color:#C9892B">'+res.missingBill+' with no bill number</span>');
+        if(res.missingDriver) bits.push('<span style="color:#C9892B">'+res.missingDriver+' with no driver named</span>');
+        el('rptPreview').innerHTML = '<div class="rptprev">'+bits.join('<br>')+'</div>';
+        el('rptBtn').disabled = res.count === 0;
+      });
+      if(res && !res.ok && !res.relogin){ el('rptPreview').textContent = res.error || 'Could not check.'; }
+    });
+  }
+  function makeFuelReport(){
+    var b = el('rptBtn');
+    b.disabled = true; b.textContent = 'Building the PDF…';
+    call('generateFuelReport', [ADMIN.token, el('rptFrom').value, el('rptTo').value], function(res){
+      b.textContent = 'Generate PDF'; b.disabled = false;
+      handleAdminRes(res, function(){ deliverFile(res, 'application/pdf'); previewReport(); });
+    });
+  }
+
+  // ---- Attendance -----------------------------------------------------------
+  function attShow(which){
+    el('attDayWrap').style.display    = which==='day'    ? 'block' : 'none';
+    el('attRosterWrap').style.display = which==='roster' ? 'block' : 'none';
+    el('attMonthWrap').style.display  = which==='month'  ? 'block' : 'none';
+    if(which==='month' && !el('attMonth').value){
+      var n = new Date(); el('attMonth').value = n.getFullYear()+'-'+pad(n.getMonth()+1);
+      loadAttendanceMonth();
+    }
+    window.scrollTo(0,0);
+  }
+  function attInit(){
+    attShow('day');
+    if(!el('attDate').value) el('attDate').value = todayIso();
+    loadAttendanceDay(); loadRoster();
+  }
+
+  function loadAttendanceDay(){
+    el('attList').innerHTML = '<div class="loading">Loading…</div>';
+    call('getAttendanceDay', [ADMIN.token, el('attDate').value], function(res){
+      handleAdminRes(res, function(){
+        ATT = res;
+        el('attDayHint').innerHTML = res.weekOff
+          ? '<b>'+esc(res.dateLabel)+'</b> — normally a week off. Mark it only if they worked.'
+          : esc(res.dateLabel) + (res.alreadyMarked ? ' · already marked, saving again corrects it'
+                                                    : ' · not marked yet');
+        renderAttDay();
+      });
+    });
+  }
+  function renderAttDay(){
+    if(!ATT) return;
+    var q = (el('attSearch').value||'').toLowerCase();
+    var rows = ATT.rows.filter(function(r){
+      return (r.name+' '+r.route_no).toLowerCase().indexOf(q) >= 0;
+    });
+    if(!rows.length){ el('attList').innerHTML = '<div class="muted">Nobody matches.</div>'; }
+    else {
+      el('attList').innerHTML = rows.map(function(r){
+        return '<div class="attrow"><div class="attwho">'+
+          '<div class="ttl">'+esc(r.name || '(no name)')+'</div>'+
+          '<div class="meta">'+esc(r.route_no||'—')+(r.kind==='Extra'?' · extra row':'')+'</div></div>'+
+          '<div class="attcodes">'+ ATT.codes.map(function(c){
+            return '<button class="attbtn'+(r.code===c?' on c-'+c:'')+'" title="'+esc(ATT.labels[c])+'" '+
+                   'onclick="attSet(\''+esc(r.member_id)+'\',\''+c+'\')">'+c+'</button>';
+          }).join('') + '</div></div>';
+      }).join('');
+    }
+    renderAttSummary();
+  }
+  function renderAttSummary(){
+    var counts = {};
+    ATT.rows.forEach(function(r){ if(r.code) counts[r.code] = (counts[r.code]||0)+1; });
+    var blank = ATT.rows.filter(function(r){ return !r.code; }).length;
+    var bits = ATT.codes.filter(function(c){ return counts[c]; })
+      .map(function(c){ return '<span class="chip c-'+c+'">'+counts[c]+' '+esc(ATT.labels[c])+'</span>'; });
+    if(blank) bits.push('<span class="chip">'+blank+' not marked</span>');
+    el('attSummary').innerHTML = bits.join('');
+  }
+  function attSet(id, code){
+    ATT.rows.forEach(function(r){
+      if(r.member_id===id) r.code = (r.code===code) ? '' : code; // tap again to clear
+    });
+    renderAttDay();
+  }
+  function attSetAll(code){
+    ATT.rows.forEach(function(r){ r.code = code; });
+    renderAttDay();
+  }
+  function saveAttendanceDay(){
+    if(!ATT) return;
+    var b = el('attSaveBtn'); b.disabled = true; b.textContent = 'Saving…';
+    var marks = ATT.rows.map(function(r){ return { member_id:r.member_id, code:r.code, note:r.note }; });
+    call('markAttendanceDay', [ADMIN.token, ATT.date, marks], function(res){
+      b.disabled = false; b.textContent = 'Save attendance';
+      handleAdminRes(res, function(){ loadAttendanceDay(); });
+    });
+  }
+
+  function loadRoster(){
+    call('listRoster', [ADMIN.token], function(res){
+      handleAdminRes(res, function(){
+        var rows = res.extras.filter(function(r){ return String(r.status).toLowerCase()!=='retired'; });
+        el('rosterList').innerHTML = rows.length ? rows.map(function(r){
+          return '<div class="listrow" onclick="openRosterEdit(\''+esc(r.roster_id)+'\')">'+
+            '<div class="main"><div class="ttl">'+esc(r.label)+'</div>'+
+            '<div class="meta">'+esc(r.route_no||'no route')+' · order '+esc(r.sort_order||'—')+'</div></div>'+
+            '<span class="go">›</span></div>';
+        }).join('') : '<div class="muted">No extra rows — the sheet is just your drivers.</div>';
+        ROSTER = res.extras;
+      });
+    });
+  }
+  var ROSTER = [];
+  function openRosterAdd(){
+    EDITR = null; resetForm('form-roster');
+    el('rosterEditorTitle').textContent = 'Add a row';
+    el('rosterSaveBtn').textContent = 'Add row';
+    el('rosterRetireBar').classList.remove('show');
+    attShow('roster');
+  }
+  function openRosterEdit(id){
+    EDITR = id;
+    var r = ROSTER.filter(function(x){ return x.roster_id===id; })[0]; if(!r) return;
+    fillForm('form-roster', r);
+    el('rosterEditorTitle').textContent = 'Edit ' + (r.label||id);
+    el('rosterSaveBtn').textContent = 'Save changes';
+    el('rosterRetireBar').classList.add('show');
+    attShow('roster');
+  }
+  function saveRosterRow(){
+    var data = readForm('form-roster');
+    var fn = EDITR ? 'updateRosterRow' : 'addRosterRow';
+    var args = EDITR ? [ADMIN.token, EDITR, data] : [ADMIN.token, data];
+    call(fn, args, function(res){
+      handleAdminRes(res, function(){ attShow('day'); loadRoster(); loadAttendanceDay(); });
+    });
+  }
+  function retireRoster(){
+    if(!EDITR) return;
+    if(!confirm('Remove this row from the attendance sheet? Past months keep it.')) return;
+    call('retireRosterRow', [ADMIN.token, EDITR], function(res){
+      handleAdminRes(res, function(){ attShow('day'); loadRoster(); loadAttendanceDay(); });
+    });
+  }
+
+  function loadAttendanceMonth(){
+    el('attMonthBody').innerHTML = '<div class="loading">Loading…</div>';
+    call('getAttendanceMonth', [ADMIN.token, el('attMonth').value], function(res){
+      handleAdminRes(res, function(){ ATTMONTH = res; renderAttMonth(res); });
+      if(res && !res.ok && !res.relogin) el('attMonthBody').innerHTML = '<div class="empty">'+esc(res.error)+'</div>';
+    });
+  }
+  function renderAttMonth(g){
+    var h = '<div class="muted" style="margin-bottom:8px">'+esc(g.monthLabel)+' · '+g.rows.length+
+            ' people · '+g.workingDays+' working days</div>';
+    h += '<div class="gridwrap"><table class="agrid"><thead><tr><th class="stick">Name</th>';
+    g.days.forEach(function(d){
+      h += '<th class="'+(d.weekOff?'off':'')+'">'+d.day+'<div class="dw">'+(d.weekOff?'–':d.dow)+'</div></th>';
+    });
+    h += '<th>P</th><th>L</th></tr></thead><tbody>';
+    g.rows.forEach(function(r){
+      h += '<tr><th class="stick"><div class="ttl">'+esc(r.name||'(no name)')+'</div>'+
+           '<div class="meta">'+esc(r.route_no||'')+'</div></th>';
+      r.cells.forEach(function(c, i){
+        h += '<td class="'+(g.days[i].weekOff?'off':'')+(c?' c-'+c:'')+'">'+esc(c)+'</td>';
+      });
+      h += '<td class="tot">'+(r.present + (r.half? r.half*0.5 : 0))+'</td><td class="tot">'+r.leave+'</td></tr>';
+    });
+    h += '<tr class="tally"><th class="stick">Present</th>';
+    g.tallies.forEach(function(t, i){ h += '<td class="'+(g.days[i].weekOff?'off':'')+'">'+(t.total?t.present:'')+'</td>'; });
+    h += '<td></td><td></td></tr><tr class="tally"><th class="stick">Leave</th>';
+    g.tallies.forEach(function(t, i){ h += '<td class="'+(g.days[i].weekOff?'off':'')+'">'+(t.total?t.leave:'')+'</td>'; });
+    h += '<td></td><td></td></tr></tbody></table></div>';
+    el('attMonthBody').innerHTML = h;
+  }
+  function makeAttendancePdf(){
+    call('generateAttendancePdf', [ADMIN.token, el('attMonth').value], function(res){
+      handleAdminRes(res, function(){ deliverFile(res, 'application/pdf'); });
+    });
+  }
+  function makeAttendanceCsv(){
+    call('exportAttendanceCsv', [ADMIN.token, el('attMonth').value], function(res){
+      handleAdminRes(res, function(){ deliverFile(res, 'text/csv'); });
+    });
+  }
+
+  // ---- Toast ---------------------------------------------------------------
+  var toastTimer;
+  function toast(msg, isErr){
+    var t = el('toast');
+    t.textContent = msg; t.className = isErr ? 'show err' : 'show';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ t.className = isErr ? 'err' : ''; }, 3500);
+  }
+</script>

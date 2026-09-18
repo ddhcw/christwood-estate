@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Styles'); ?>
+</head>
+<body data-preset="<?= presetVehicle ?>">
+  <div class="wrap">
+
+    <div class="bar">
+      <button class="back" id="backBtn" onclick="goHome()">‹</button>
+      <div style="flex:1; min-width:0">
+        <h1 id="barTitle">Fleet Tracker</h1>
+        <div class="sub" id="barSub">Loading…</div>
+      </div>
+      <button class="lock" id="lockBtn" onclick="lockTap()" aria-label="Admin">🔒</button>
+    </div>
+
+    <!-- HOME -->
+    <div id="view-home" class="view active">
+      <div class="qbanner" id="queueBanner" style="display:none" onclick="trySendQueue(false)"></div>
+      <div id="stateBanner"></div>
+      <div class="grid">
+        <button class="tile t-peach"  onclick="openAdd('fuel')"><span class="ic">⛽</span><span class="lb">Add Fuel</span></button>
+        <button class="tile t-sky"    onclick="openAdd('maint')"><span class="ic">🔧</span><span class="lb">Add Maintenance</span></button>
+        <button class="tile t-mint"   onclick="openAdd('trip')"><span class="ic">🚌</span><span class="lb">Add Trip</span></button>
+        <button class="tile t-butter admin-only" onclick="show('doc')"><span class="ic">📄</span><span class="lb">Documents</span></button>
+        <button class="tile t-lav admin-only"    onclick="show('vehicles')"><span class="ic">🚐</span><span class="lb">Vehicles</span></button>
+        <button class="tile t-lav admin-only"    onclick="show('drivers')"><span class="ic">🧑‍✈️</span><span class="lb">Drivers</span></button>
+        <button class="tile t-butter admin-only" onclick="show('attendance')"><span class="ic">🗓</span><span class="lb">Attendance</span></button>
+        <button class="tile t-pink admin-only"   onclick="show('fix')"><span class="ic">✏️</span><span class="lb">Fix Entries</span></button>
+        <button class="tile t-pink admin-only"   onclick="show('dashboard')"><span class="ic">📊</span><span class="lb">Dashboard</span></button>
+      </div>
+      <div id="adminHint" class="muted" style="margin-top:16px; text-align:center">
+        Tap the <b>🔒 lock</b> (top-right) to unlock admin tools.
+      </div>
+    </div>
+
+    <!-- Views -->
+    <div id="view-fuel"      class="view"><?!= include('FuelForm'); ?></div>
+    <div id="view-maint"     class="view"><?!= include('MaintenanceForm'); ?></div>
+    <div id="view-trip"      class="view"><?!= include('TripForm'); ?></div>
+    <div id="view-doc"       class="view"><?!= include('DocForm'); ?></div>
+    <div id="view-vehicles"  class="view"><?!= include('VehicleAdmin'); ?></div>
+    <div id="view-drivers"   class="view"><?!= include('DriverAdmin'); ?></div>
+    <div id="view-fix"       class="view"><?!= include('FixEntries'); ?></div>
+    <div id="view-attendance" class="view"><?!= include('AttendanceForm'); ?></div>
+    <div id="view-dashboard" class="view"><?!= include('Dashboard'); ?></div>
+    <div id="view-adminlogin" class="view"><?!= include('AdminLogin'); ?></div>
+
+  </div>
+
+  <!-- Small confirm sheet: back on road, odometer broken / fixed -->
+  <div id="dlgWrap" class="dlgwrap" onclick="if(event.target===this) closeDlg()">
+    <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+      <h2 id="dlgTitle"></h2>
+      <div id="dlgBody"></div>
+      <button class="btn" id="dlgOk" onclick="dlgConfirm()">Confirm</button>
+      <button class="btn ghost" style="margin-top:8px" onclick="closeDlg()">Cancel</button>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <?!= include('Script'); ?>
+</body>
+</html>
