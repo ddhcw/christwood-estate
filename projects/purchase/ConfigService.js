@@ -28,6 +28,7 @@ function getConfig() {
     seqPadding: 4,
     onSubmissionEmails: '',
     onPrincipalEmails: '',
+    onAdminHeadEmails: '',
     onCEOEmails: '',
     onRejectionEmails: '',
     guestEmails: '',
@@ -91,6 +92,9 @@ function getConfig() {
         break;
       case 'On Principal Approval':
         config.onPrincipalEmails = colC;
+        break;
+      case 'On Admin Head Approval':
+        config.onAdminHeadEmails = colC;
         break;
       case 'On CEO Approval':
         config.onCEOEmails = colC;
@@ -161,7 +165,7 @@ function getNextRequestId() {
 }
 /**
  * Returns notification recipients for a given stage.
- * @param {string} stage - 'submission', 'principal', 'ceo', 'rejection'
+ * @param {string} stage - 'submission', 'principal', 'adminHead', 'ceo', 'rejection'
  * @return {string[]} Array of email addresses
  */
 function getNotificationRecipients(stage) {
@@ -173,6 +177,9 @@ function getNotificationRecipients(stage) {
       break;
     case 'principal':
       emailStr = config.onPrincipalEmails;
+      break;
+    case 'adminHead':
+      emailStr = config.onAdminHeadEmails;
       break;
     case 'ceo':
       emailStr = config.onCEOEmails;
