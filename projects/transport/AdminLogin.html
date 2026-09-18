@@ -1,0 +1,16 @@
+<div class="card" id="form-login">
+  <h2>🔒 Admin unlock</h2>
+  <p class="muted" style="margin-top:-6px">Only the admin can manage vehicles &amp; drivers, fix entries, and see the dashboard.</p>
+
+  <div class="field">
+    <label class="req">Your name</label>
+    <input type="text" id="login-name" placeholder="so edits are signed">
+  </div>
+  <div class="field">
+    <label class="req">Admin PIN</label>
+    <input type="password" id="login-pin" inputmode="numeric" placeholder="••••" onkeydown="if(event.key==='Enter')doLogin()">
+  </div>
+
+  <button class="btn" onclick="doLogin()">Unlock</button>
+  <p class="muted" style="margin-top:12px">No PIN yet? The owner sets one in the Sheet: <b>🚌 Fleet → Set / change admin PIN</b>.</p>
+</div>

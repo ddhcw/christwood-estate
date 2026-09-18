@@ -1,0 +1,17 @@
+<div class="card">
+  <h2>✏️ Fix entries</h2>
+  <p class="muted" style="margin-top:-6px">Pick an entry to correct it, or void it if it was a mistake. Voided entries stay on record but are left out of the figures.</p>
+
+  <div class="seg" id="fixSeg">
+    <button class="seg-btn active" data-type="fuel"  onclick="setFixType('fuel')">⛽ Fuel</button>
+    <button class="seg-btn"        data-type="maint" onclick="setFixType('maint')">🔧 Maintenance</button>
+    <button class="seg-btn"        data-type="trip"  onclick="setFixType('trip')">🚌 Trip</button>
+  </div>
+
+  <div class="field" style="margin-top:14px">
+    <label>Filter by vehicle</label>
+    <select class="js-vehicle" id="fixVehicle" onchange="loadFix()"></select>
+  </div>
+
+  <div id="fixList"><div class="loading">Loading…</div></div>
+</div>

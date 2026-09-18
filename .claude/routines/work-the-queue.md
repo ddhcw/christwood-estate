@@ -10,8 +10,11 @@ Read `.claude/agent-window.json`.
 
 - If `agent_enabled` is not `true` → stop immediately. Say "agent disabled" and
   do nothing else.
-- If today's date is after `agent_until` → stop immediately. Say "window closed"
-  and do nothing else.
+- If the current time is at or after `agent_until` → stop immediately. Say
+  "window closed" and do nothing else. `agent_until` is a full **timestamp**
+  with a timezone offset, not a date — compare instants, not calendar days.
+  Run `date -u +%Y-%m-%dT%H:%M:%SZ` to get the current time rather than
+  assuming what today is.
 
 Do not read the repo, do not list issues, do not think about the work. Exit.
 
@@ -32,6 +35,17 @@ In this order:
    comment on the issue saying so. Do not implement an unaccepted RFC.
 4. `projects/<slug>/PROJECT.md` — bindings and footguns.
 5. `standards/category-router.md` → the matching category file.
+
+## Step 3b — investigate-only tickets
+
+If the ticket is marked **Investigate only**, do not change code. Read, work out
+what is actually happening, and post your findings as a comment on the issue:
+what you checked, what you can rule out, what you cannot determine from here,
+and what a human would need to check next. Then remove `approved`, add
+`awaiting-review`, and stop. No branch, no PR.
+
+Saying "I could not determine this from the sandbox" is the correct answer when
+it is true. Do not manufacture a fix to look productive.
 
 ## Step 4 — implement, through the subagents
 
