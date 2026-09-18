@@ -48,9 +48,17 @@ function morningChecks() {
       lic.map(function (x) { return x.row; })));
   }
 
-  // 3) Service due (km since last "Scheduled" maintenance).
-  const due = computeServiceDue_(active, regOf, settings);
-  if (due.length) sections.push(sec_('🔧 Service due', ['Vehicle', 'Since last service', 'Status'], due));
+  // 3) Service due (fleet-wide service date — RFC-0002).
+  const service = computeServiceDue_(active, regOf, settings);
+  if (service.noDateSet) {
+    sections.push(sec_('🔧 Service due', ['Status'], [['No service due date is set — see Settings.']]));
+  } else {
+    const serviceRows = service.due.slice();
+    if (service.unknownCount) {
+      serviceRows.push([service.unknownCount + ' vehicle(s) with no maintenance history', 'Unknown']);
+    }
+    if (serviceRows.length) sections.push(sec_('🔧 Service due', ['Vehicle', 'Status'], serviceRows));
+  }
 
   // 4) Silent vehicles (active, but no fuel entry for a while).
   //    Off-road vehicles are meant to be silent, so they never appear here.
@@ -134,37 +142,58 @@ function morningChecks() {
 /** Old name kept so any existing trigger or habit still works. */
 // (checkDocumentExpiry in Triggers.gs calls morningChecks)
 
+/**
+ * date minus N months, clamped to the last valid day of the target month
+ * (Date.setMonth overflows instead, e.g. Mar 31 - 1mo would land in April).
+ */
+function subtractMonthsClamped_(date, months) {
+  const totalMonths = date.getFullYear() * 12 + date.getMonth() - months;
+  const targetYear = Math.floor(totalMonths / 12);
+  const targetMonth = ((totalMonths % 12) + 12) % 12;
+  const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+  return new Date(targetYear, targetMonth, Math.min(date.getDate(), daysInTargetMonth));
+}
+
+/**
+ * Fleet-wide, date-based service check (RFC-0002).
+ *
+ * Returns { noDateSet, due, unknownCount }:
+ *   noDateSet    — true when Settings has no service_due_date at all; callers
+ *                  must say so rather than silently listing nothing, since a
+ *                  blank due list must not read the same as "all fine".
+ *   due          — [reg_no, ...] for vehicles due (only meaningful when
+ *                  noDateSet is false).
+ *   unknownCount — active vehicles with no maintenance record at all. Never
+ *                  counted as due (a fleet-wide date must not flag a vehicle
+ *                  with no history the moment the date passes).
+ */
 function computeServiceDue_(active, regOf, settings) {
-  const interval = parseFloat(settings.service_interval_km) || 10000;
-  const warn = parseFloat(settings.service_warn_km) || 500;
+  const dueDate = parseDate_(settings.service_due_date);
+  if (!dueDate) return { noDateSet: true, due: [], unknownCount: 0 };
+
+  const parsedMonths = parseInt(settings.service_interval_months, 10);
+  const months = isNaN(parsedMonths) ? 12 : parsedMonths;
+  const dueDateStart = startOfDay_(dueDate);
+  const isPastDue = startOfDay_(new Date()) >= dueDateStart;
+  const cutoff = subtractMonthsClamped_(dueDateStart, months);
+
   const maint = getRows_(SHEETS.MAINT).filter(function (r) { return !isVoided_(r); });
-  const due = [];
-  active.forEach(function (v) {
-    // A service interval is measured in km. With a dead meter there is no
-    // honest figure to measure, so this vehicle is reported under its own
-    // heading instead of guessed at here.
-    if (!odoWorks_(v)) return;
-    const ctx = odoContext_(v.vehicle_id);
-    const pts = collectOdoPoints_(v.vehicle_id);
-    if (!pts.length) return;
-    const lastOdo = pts[pts.length - 1].odo;
-    var baseline = null; // odometer at the most recent scheduled service
-    maint.forEach(function (r) {
-      if (r.vehicle_id === v.vehicle_id && String(r.category).toLowerCase() === 'scheduled') {
-        const d = parseDate_(r.date);
-        if (ctx.eraFrom && d && startOfDay_(d) < ctx.eraFrom) return; // serviced on the old meter
-        const o = toNum_(r.odometer);
-        if (o !== null && (baseline === null || o > baseline)) baseline = o;
-      }
-    });
-    if (baseline === null) baseline = pts[0].odo; // never serviced on record: count from first reading
-    const since = lastOdo - baseline;
-    if (since >= interval - warn) {
-      due.push([regOf[v.vehicle_id], Math.round(since).toLocaleString() + ' km',
-                since >= interval ? 'DUE NOW' : 'due soon']);
-    }
+  const hasAnyRecord = {};
+  const servicedSinceCutoff = {};
+  maint.forEach(function (r) {
+    hasAnyRecord[r.vehicle_id] = true;
+    if (String(r.category).toLowerCase() !== 'scheduled') return;
+    const d = parseDate_(r.date);
+    if (d && startOfDay_(d) >= cutoff) servicedSinceCutoff[r.vehicle_id] = true;
   });
-  return due;
+
+  const due = [];
+  var unknownCount = 0;
+  active.forEach(function (v) {
+    if (!hasAnyRecord[v.vehicle_id]) { unknownCount++; return; }
+    if (isPastDue && !servicedSinceCutoff[v.vehicle_id]) due.push([regOf[v.vehicle_id], 'Service due']);
+  });
+  return { noDateSet: false, due: due, unknownCount: unknownCount };
 }
 
 function computeSilentVehicles_(active, regOf, settings, today) {
@@ -271,8 +300,16 @@ function weeklyDigest() {
       watch.map(function (w) { return [w.reg_no, w.reasons.join('; ')]; }));
   }
 
-  const due = computeServiceDue_(active, regOf, settings);
-  if (due.length) body += sec_('🔧 Service due', ['Vehicle', 'Since last service', 'Status'], due);
+  const service = computeServiceDue_(active, regOf, settings);
+  if (service.noDateSet) {
+    body += sec_('🔧 Service due', ['Status'], [['No service due date is set — see Settings.']]);
+  } else {
+    const serviceRows = service.due.slice();
+    if (service.unknownCount) {
+      serviceRows.push([service.unknownCount + ' vehicle(s) with no maintenance history', 'Unknown']);
+    }
+    if (serviceRows.length) body += sec_('🔧 Service due', ['Vehicle', 'Status'], serviceRows);
+  }
 
   const docs = upcomingExpiries_(regOf, settings);
   if (docs.length) {

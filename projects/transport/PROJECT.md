@@ -30,7 +30,7 @@ confirmed identical to the local working copy. Per shipping standards §2:
 | `Attendance.js` / `AttendanceForm.html` | Driver attendance |
 | `FuelReport.js` / `FuelForm.html` | Fuel entry and reporting |
 | `MaintenanceForm.html` / `DocForm.html` / `TripForm.html` | Entry forms |
-| `Analytics.js` / `Reports.js` / `Dashboard.html` | Dashboard and reporting |
+| `Analytics.js` / `Reports.js` / `Dashboard.html` | Dashboard and reporting — service-due status (`Reports.js`, `computeServiceDue_`) is date-driven, not km-driven; see Footguns |
 | `Setup.js` | Idempotent sheet setup |
 | `Triggers.js` | Time-driven triggers |
 | `Index/Script/Styles.html` | Shared web app shell |
@@ -43,3 +43,9 @@ confirmed identical to the local working copy. Per shipping standards §2:
 - `FixEntries.html` exists to repair bad rows. If a change can create bad rows,
   it needs a matching repair path, per shipping standards §6 (every automated
   job needs a manual on-demand twin).
+- Since RFC-0002, fleet-wide service-due tracking is entirely date-driven via
+  the `service_due_date` Settings row — the odometer/km basis was dropped. If
+  the transport department never sets that date, or sets it once and lets it
+  go stale, no vehicle will ever be flagged as due and the system will not
+  complain; there is no automated backstop for a missing or stale date. This
+  is a known accepted risk from RFC-0002, not a bug.
