@@ -6,17 +6,38 @@ stop.
 
 ## Step 1 — kill switch. Do this FIRST, before reading anything else.
 
-Read `.claude/agent-window.json`.
+Read `.claude/agent-window.json`, then run `date -u +%Y-%m-%dT%H:%M:%SZ` to get
+the real current time. Do not assume what day it is.
 
-- If `agent_enabled` is not `true` → stop immediately. Say "agent disabled" and
-  do nothing else.
-- If the current time is at or after `agent_until` → stop immediately. Say
-  "window closed" and do nothing else. `agent_until` is a full **timestamp**
-  with a timezone offset, not a date — compare instants, not calendar days.
-  Run `date -u +%Y-%m-%dT%H:%M:%SZ` to get the current time rather than
-  assuming what today is.
+Stop immediately, saying why and doing nothing else, if any of these hold:
 
-Do not read the repo, do not list issues, do not think about the work. Exit.
+1. `agent_enabled` is not `true` → "agent disabled".
+2. `override_until` is set and the current time is at or after it → "override
+   expired".
+3. `override_until` is null **and** the current time is outside this week's
+   `weekly_window` → "outside window".
+
+### Computing the weekly window
+
+All times are in the file's `timezone` (`Asia/Kolkata`, UTC+05:30). Convert the
+current UTC time into that zone first, then ask: is now between the most recent
+`start` and the `end` that follows it?
+
+The window crosses midnight and a day boundary, so do not compare day names
+alone. Worked example for the default Thursday 19:00 → Saturday 07:00:
+
+- Friday 02:00 IST → inside (after Thursday 19:00, before Saturday 07:00)
+- Saturday 06:59 IST → inside
+- Saturday 07:01 IST → outside
+- Thursday 18:59 IST → outside
+- Monday any time → outside
+
+If `override_until` is set and the current time is before it, the window is
+open regardless of the weekly schedule. That is the escape hatch for a sprint
+that needs to run long.
+
+When you stop for any of these reasons, stop **before** listing issues or
+reading the repo. A closed window must cost nothing.
 
 ## Step 2 — pick exactly one ticket
 
