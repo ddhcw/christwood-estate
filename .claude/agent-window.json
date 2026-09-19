@@ -1,7 +1,15 @@
 {
   "agent_enabled": true,
-  "agent_until": "2026-09-19T04:00:00+05:30",
   "timezone": "Asia/Kolkata",
-  "note": "agent_until is a TIMESTAMP, not a date. Compare the current time to it directly. Dan is back Saturday morning; the window closes at 4am Saturday 19 Sep IST. Phase 2 will have the GAS nightly sync write this file from the tracker Config tab; for now it is hand-edited.",
-  "max_tickets_per_run": 1
+
+  "weekly_window": {
+    "start": { "day": "Thursday", "time": "19:00" },
+    "end":   { "day": "Saturday", "time": "07:00" }
+  },
+
+  "override_until": null,
+
+  "max_tickets_per_run": 1,
+
+  "note": "The window recurs every week and needs no editing. The routine computes whether the current instant falls inside THIS week's window. 'override_until' is an optional one-off timestamp that EXTENDS the window (e.g. '2026-09-22T18:00:00+05:30' to keep working into Tuesday); null means no override. Set agent_enabled false to stop everything regardless."
 }
