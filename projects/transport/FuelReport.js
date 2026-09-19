@@ -374,6 +374,70 @@ function reportFolder_() {
   return it.hasNext() ? it.next() : DriveApp.createFolder('Fleet Fuel Reports');
 }
 
+// ---------------------------------------------------------------------------
+// Duplicate fuel entries (dashboard, read-only)
+//
+// A "duplicate" here means exactly one thing, by definition: same vehicle +
+// same calendar date + same amount. All three must match. This does not
+// widen to a fuzzy match, and it only ever looks at Fuel_Log — trip,
+// attendance and maintenance entries are out of scope for this check.
+//
+// This is a pure read + group operation: it never edits, voids or merges a
+// row. It only points at rows that look like a double entry so a human can
+// check them (and fix/void from Fix Entries if they agree).
+// ---------------------------------------------------------------------------
+
+/**
+ * Group non-voided Fuel_Log rows by vehicle + calendar date (Asia/Kolkata) +
+ * numeric amount, and return only the groups with more than one row.
+ *
+ * Dates are compared as calendar dates via Utilities.formatDate (not string
+ * equality), so a real Date, a serial or a typed "yyyy-MM-dd" all land on the
+ * same key. Amounts are parsed with toNum_ and rounded to 2 decimals, so
+ * "12.0", "12" and "12 " (trailing space) all match.
+ */
+function duplicateFuelGroups_() {
+  const regOf = vehicleRegMap_();
+  const groups = {};
+  getRows_(SHEETS.FUEL).forEach(function (r) {
+    if (isVoided_(r) || isBlank_(r.vehicle_id)) return;
+    const d = parseDate_(r.date);
+    const amt = toNum_(r.amount);
+    if (!d || amt === null) return;
+    const dayKey = Utilities.formatDate(d, TZ_(), 'yyyy-MM-dd');
+    const amtKey = round2_(amt).toFixed(2);
+    const key = r.vehicle_id + '|' + dayKey + '|' + amtKey;
+    (groups[key] = groups[key] || []).push({
+      entry_id: r.entry_id,
+      vehicle_id: r.vehicle_id,
+      reg_no: regOf[r.vehicle_id] || r.vehicle_id,
+      date: Utilities.formatDate(d, TZ_(), 'dd MMM yyyy'),
+      amount: round2_(amt),
+      litres: toNum_(r.litres),
+      product: r.product || 'Diesel',
+      bill_no: r.bill_no || '',
+      station: r.station || '',
+      odometer: toNum_(r.odometer),
+      entered_by: r.entered_by || ''
+    });
+  });
+  const out = [];
+  Object.keys(groups).forEach(function (key) {
+    const entries = groups[key];
+    if (entries.length < 2) return;
+    out.push({
+      vehicle_id: entries[0].vehicle_id,
+      reg_no: entries[0].reg_no,
+      date: entries[0].date,
+      amount: entries[0].amount,
+      count: entries.length,
+      entries: entries
+    });
+  });
+  out.sort(function (a, b) { return b.count - a.count || a.reg_no.localeCompare(b.reg_no); });
+  return out;
+}
+
 function styleReportTable_(table, hasTotalRow) {
   table.setBorderWidth(1);
   const totalRowIdx = hasTotalRow ? table.getNumRows() - 1 : -1;
