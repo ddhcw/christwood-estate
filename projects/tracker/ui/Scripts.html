@@ -1,0 +1,450 @@
+<script>
+/* Christwood ICT — Projects Tracker (client)
+ *
+ * The whole payload is injected server-side, so first paint needs no round
+ * trip and there is never a blank page. The only google.script.run calls are
+ * Refresh and "show closed items" — both read-only. There is no write path
+ * here by design: the app is deployed anonymously and cannot know who you are,
+ * so a form here would be anonymous and spammable. Suggestions are typed in
+ * the Sheets, which is also where they are already working.
+ */
+
+var SNAP = { projects: [], items: [], stats: {} };
+try { SNAP = JSON.parse(document.getElementById('tracker-data').textContent || '{}'); } catch (e) {}
+
+var VIEW = 'projects';
+var FILTER = 'All';
+var closedCache = {};
+
+/* Returning visitors land where they left off; first-timers see the projects,
+   which is what the page is for when the CEO opens it. */
+try {
+  var saved = localStorage.getItem('cw_tracker_view');
+  if (saved === 'items' || saved === 'projects') VIEW = saved;
+} catch (e) {}
+
+// ---------- helpers ----------
+
+function esc(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+    });
+}
+
+function statusBadge(status) {
+  var s = String(status || '');
+  if (/^launch(ed)?$|live/i.test(s))      return ['b-done',    '●'];
+  if (/building|testing|launching/i.test(s)) return ['b-pending', '◐'];
+  if (/paused|hold/i.test(s))             return ['b-stale',   '⏸'];
+  return ['b-stale', '·'];
+}
+
+function itemStatusBadge(status) {
+  switch (status) {
+    case 'New':          return ['b-pending', '◆'];
+    case 'Accepted':     return ['b-info',    '✓'];
+    case 'In progress':  return ['b-info',    '◐'];
+    case 'Done':         return ['b-done',    '●'];
+    case "Won't do":     return ['b-stale',   '×'];
+    case 'Not an issue': return ['b-stale',   '–'];
+    default:             return ['b-stale',   '·'];
+  }
+}
+
+function projectGroup(p) {
+  var s = String(p.status || '');
+  if (/^launch(ed)?$|live/i.test(s)) return 'Launched';
+  if (/building/i.test(s))   return 'Building';
+  if (/launching/i.test(s))  return 'Launching';
+  if (/testing/i.test(s))    return 'Testing';
+  return 'Other';
+}
+
+function link(url, label, cls) {
+  if (!url) return '';
+  return '<a class="link-btn ' + (cls || '') + '" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+         esc(label) + ' ↗</a>';
+}
+
+// ---------- header ----------
+
+function buildHeader() {
+  var st = SNAP.stats || {};
+  document.getElementById('freshness').textContent =
+    'Data as of ' + (SNAP.generatedTime || '—') + ' · last sync ' + (SNAP.lastSyncLabel || 'never');
+
+  var chips = [
+    { lbl: 'Systems',     num: st.total || 0 },
+    { lbl: 'Launched',    num: st.launched || 0 },
+    { lbl: 'Open items',  num: st.openItems || 0 },
+    { lbl: 'Past due',    num: st.overdue || 0,    warn: (st.overdue || 0) > 0 },
+    { lbl: 'Blocked',     num: st.blocked || 0,    warn: (st.blocked || 0) > 0 },
+    { lbl: 'Unassigned',  num: st.unassigned || 0, warn: (st.unassigned || 0) > 0 }
+  ];
+  document.getElementById('statRow').innerHTML = chips.map(function (c) {
+    return '<div class="stat-chip' + (c.warn ? ' warn' : '') + '">' +
+           '<div class="num">' + c.num + '</div><div class="lbl">' + c.lbl + '</div></div>';
+  }).join('');
+
+  document.getElementById('cnt-items').textContent = (SNAP.items || []).length;
+  document.getElementById('cnt-projects').textContent = (SNAP.projects || []).length;
+
+  /* Honest state: a dead sync should be visible on the page, not inferred from
+     suggestions mysteriously drying up. */
+  var banners = [];
+  if (SNAP.lastSyncStale) {
+    banners.push('<div class="banner"><span>⚠️</span><div><b>The nightly sync has not run recently.</b> ' +
+      'Last successful run: ' + esc(SNAP.lastSyncLabel) +
+      '. Suggestions raised inside project files may not appear here yet.</div></div>');
+  }
+  if (st.overdue) {
+    banners.push('<div class="banner"><span>📅</span><div><b>' + st.overdue + ' item' +
+      (st.overdue === 1 ? ' is' : 's are') + ' past the date they were needed by.</b> ' +
+      'They are at the top of the Open items list.</div></div>');
+  }
+  var live = st.unassignedLive || [];
+  if (live.length) {
+    banners.push('<div class="banner warn"><span>👤</span><div><b>' +
+      live.length + ' live system' + (live.length === 1 ? ' has' : 's have') + ' nobody named:</b> ' +
+      esc(live.join(', ')) +
+      '. Staff depend on ' + (live.length === 1 ? 'it' : 'them') + ' today.</div></div>');
+  }
+  document.getElementById('banners').innerHTML = banners.join('');
+
+  var footer = esc(SNAP.orgLabel || '') + ' · Sheets are where you write, this page is where you read.<br>' +
+    (SNAP.lastSyncStale
+      ? '<span class="stale">Last sync ' + esc(SNAP.lastSyncLabel) + '</span>'
+      : 'Last sync ' + esc(SNAP.lastSyncLabel)) +
+    ' · page built ' + esc(SNAP.generatedAt || '');
+  document.getElementById('footer').innerHTML = footer;
+}
+
+function buildFilters() {
+  var groups = [];
+  (SNAP.projects || []).forEach(function (p) {
+    if (p.group && groups.indexOf(p.group) === -1) groups.push(p.group);
+  });
+  groups.sort();
+  var gs = document.getElementById('groupSelect');
+  var keepG = gs.value;
+  gs.innerHTML = '<option value="">All groups</option>' + groups.map(function (g) {
+    return '<option value="' + esc(g) + '">' + esc(g) + '</option>';
+  }).join('');
+  gs.value = keepG;
+
+  var people = [];
+  (SNAP.projects || []).forEach(function (p) {
+    if (p.owner && people.indexOf(p.owner) === -1) people.push(p.owner);
+    (p.contributors || []).forEach(function (c) { if (people.indexOf(c) === -1) people.push(c); });
+  });
+  (SNAP.items || []).forEach(function (i) {
+    if (i.assignee && people.indexOf(i.assignee) === -1) people.push(i.assignee);
+  });
+  people.sort();
+  var os = document.getElementById('ownerSelect');
+  var keepO = os.value;
+  os.innerHTML = '<option value="">Anyone</option>' +
+    '<option value="__none__">⚠ Nobody assigned</option>' +
+    people.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
+  os.value = keepO;
+}
+
+function buildChips() {
+  var chips = VIEW === 'items'
+    ? ['All', 'New', 'Accepted', 'In progress', 'Past due', 'Blocked',
+       'Untouched ' + (SNAP.staleDays || 14) + 'd+']
+    : ['All', 'Launched', 'Building', 'Launching', 'Testing', 'Other'];
+
+  if (chips.indexOf(FILTER) === -1) FILTER = 'All';
+
+  document.getElementById('filterChips').innerHTML = chips.map(function (c) {
+    return '<button class="chip' + (c === FILTER ? ' active' : '') + '" onclick="setFilter(\'' +
+           esc(c).replace(/'/g, '') + '\')">' + esc(c) + '</button>';
+  }).join('');
+}
+
+function setFilter(f) { FILTER = f; buildChips(); render(); }
+
+function setView(v) {
+  VIEW = v;
+  FILTER = 'All';
+  try { localStorage.setItem('cw_tracker_view', v); } catch (e) {}
+  document.getElementById('tab-items').setAttribute('aria-selected', v === 'items');
+  document.getElementById('tab-projects').setAttribute('aria-selected', v === 'projects');
+  document.getElementById('viewItems').style.display    = v === 'items' ? 'block' : 'none';
+  document.getElementById('viewProjects').style.display = v === 'projects' ? 'block' : 'none';
+  document.getElementById('searchInput').placeholder =
+    v === 'items' ? 'Search open items…' : 'Search by name, group, owner…';
+  buildChips();
+  render();
+}
+
+// ---------- rendering ----------
+
+function render() {
+  if (VIEW === 'items') renderItems();
+  else renderProjects();
+}
+
+function currentQuery() {
+  return {
+    q: document.getElementById('searchInput').value.trim().toLowerCase(),
+    group: document.getElementById('groupSelect').value,
+    owner: document.getElementById('ownerSelect').value
+  };
+}
+
+/* ---- Open items: every open item across every project, oldest first.
+        This is the triage list — the ordering is the whole point. ---- */
+function renderItems() {
+  var f = currentQuery();
+  var staleDays = SNAP.staleDays || 14;
+
+  var rows = (SNAP.items || []).filter(function (i) {
+    if (f.group && i.group !== f.group) return false;
+    if (f.owner === '__none__') { if (i.assignee || i.owner) return false; }
+    else if (f.owner && i.assignee !== f.owner && i.owner !== f.owner) return false;
+
+    if (FILTER === 'Blocked') { if (!i.waitingOn) return false; }
+    else if (FILTER === 'Past due') { if (!i.overdue) return false; }
+    else if (FILTER.indexOf('Untouched') === 0) { if (!i.stale) return false; }
+    else if (FILTER !== 'All' && i.status !== FILTER) return false;
+
+    if (f.q) {
+      var hay = [i.suggestion, i.details, i.project, i.submittedBy, i.assignee, i.owner, i.waitingOn]
+        .join(' ').toLowerCase();
+      if (hay.indexOf(f.q) === -1) return false;
+    }
+    return true;
+  });
+
+  document.getElementById('itemList').innerHTML = rows.map(function (i) {
+    var sb = itemStatusBadge(i.status);
+    var ageCls = i.overdue ? 'age-bad'
+               : (i.ageDays >= staleDays * 2 ? 'age-bad'
+               : (i.ageDays >= staleDays || i.dueSoon ? 'age-warn' : ''));
+
+    var meta = [
+      '<span class="proj-tag">' + esc(i.project || 'No project') + '</span>',
+      '<span class="badge ' + sb[0] + '">' + sb[1] + ' ' + esc(i.status) + '</span>',
+      '<span class="badge ' + (i.type === 'Request' ? 'b-info' : 'b-stale') + '">' + esc(i.type) + '</span>'
+    ];
+    if (i.dueLabel) {
+      meta.push('<span class="badge ' + (i.overdue ? 'b-error' : (i.dueSoon ? 'b-pending' : 'b-stale')) +
+                '">📅 ' + esc(i.dueLabel) + '</span>');
+    }
+    if (i.waitingOn) meta.push('<span class="badge b-error">⏳ waiting on ' + esc(i.waitingOn) + '</span>');
+    if (i.assignee)  meta.push('<span class="badge b-info">👤 ' + esc(i.assignee) + '</span>');
+    else if (i.owner) meta.push('<span class="badge b-stale">👤 ' + esc(i.owner) + '</span>');
+    else meta.push('<span class="badge b-error">⚠ nobody assigned</span>');
+    if (i.submittedBy) meta.push('<span class="badge b-stale">raised by ' + esc(i.submittedBy) + '</span>');
+
+    return '<div class="item ' + ageCls + '">' +
+      '<div class="item-top">' +
+        '<p class="item-title">' + esc(i.suggestion) + '</p>' +
+        '<span class="item-age' + (i.ageDays >= staleDays ? ' old' : '') + '">' + esc(i.ageLabel) + '</span>' +
+      '</div>' +
+      (i.details && i.details !== i.suggestion
+        ? '<div class="item-body">' + esc(i.details) + '</div>' : '') +
+      '<div class="item-meta">' + meta.join('') + '</div>' +
+      (i.note ? '<div class="item-note"><b>ICT:</b> ' + esc(i.note) + '</div>' : '') +
+    '</div>';
+  }).join('');
+
+  showEmpty(rows.length, VIEW);
+}
+
+/* Single source of truth for which projects are on screen. The grid and
+   loadClosed() both index into this, so they cannot disagree about which
+   card is number 4. */
+function filteredProjects() {
+  var f = currentQuery();
+  return (SNAP.projects || []).filter(function (p) {
+    if (FILTER !== 'All' && projectGroup(p) !== FILTER) return false;
+    if (f.group && p.group !== f.group) return false;
+    if (f.owner === '__none__') { if (p.owner) return false; }
+    else if (f.owner && p.owner !== f.owner && (p.contributors || []).indexOf(f.owner) === -1) return false;
+    if (f.q) {
+      var hay = [p.name, p.details, p.owner, p.group, (p.contributors || []).join(' ')]
+        .join(' ').toLowerCase();
+      if (hay.indexOf(f.q) === -1) return false;
+    }
+    return true;
+  });
+}
+
+/* ---- Projects: the card grid, with an open-count badge and a Suggest link. ---- */
+function renderProjects() {
+  var rows = filteredProjects();
+
+  document.getElementById('cardGrid').innerHTML = rows.map(function (p, idx) {
+    var sb = statusBadge(p.status);
+    var id = 'card-' + idx;
+
+    var badges = ['<span class="badge ' + sb[0] + '">' + sb[1] + ' ' + esc(p.status || 'Unknown') + '</span>'];
+    /* Open count only. A project with 9 done and 1 open shows 1 — otherwise the
+       badge grows forever and stops meaning anything. */
+    if (p.openCount)    badges.push('<span class="badge b-pending">💡 ' + p.openCount + ' open</span>');
+    if (p.overdueCount) badges.push('<span class="badge b-error">📅 ' + p.overdueCount + ' past due</span>');
+    if (p.blockedCount) badges.push('<span class="badge b-error">⏳ ' + p.blockedCount + ' blocked</span>');
+    if (!p.owner)       badges.push('<span class="badge b-error">⚠ unassigned</span>');
+
+    var itemsHtml = p.items.length
+      ? '<div class="item-list">' + p.items.map(function (i) {
+          var isb = itemStatusBadge(i.status);
+          return '<div class="item">' +
+            '<div class="item-top"><p class="item-title">' + esc(i.suggestion) + '</p>' +
+            '<span class="item-age' + (i.stale ? ' old' : '') + '">' + esc(i.ageLabel) + '</span></div>' +
+            (i.details && i.details !== i.suggestion ? '<div class="item-body">' + esc(i.details) + '</div>' : '') +
+            '<div class="item-meta">' +
+              '<span class="badge ' + isb[0] + '">' + isb[1] + ' ' + esc(i.status) + '</span>' +
+              (i.dueLabel ? '<span class="badge ' + (i.overdue ? 'b-error' : (i.dueSoon ? 'b-pending' : 'b-stale')) +
+                            '">📅 ' + esc(i.dueLabel) + '</span>' : '') +
+              (i.waitingOn ? '<span class="badge b-error">⏳ ' + esc(i.waitingOn) + '</span>' : '') +
+              (i.submittedBy ? '<span class="badge b-stale">' + esc(i.submittedBy) + '</span>' : '') +
+            '</div>' +
+            (i.note ? '<div class="item-note"><b>ICT:</b> ' + esc(i.note) + '</div>' : '') +
+          '</div>';
+        }).join('') + '</div>'
+      : '<span class="muted">Nothing open.</span>';
+
+    var closedBtn = p.closedCount
+      ? '<button class="closed-toggle" id="cb-' + idx + '" onclick="loadClosed(' + idx + ',this)">' +
+        'Show ' + p.closedCount + ' closed</button><div id="closed-' + idx + '"></div>'
+      : '';
+
+    return '<div class="card' + (p.owner ? '' : ' unassigned') + '" id="' + id + '">' +
+      '<div class="card-head" onclick="toggleCard(\'' + id + '\')">' +
+        '<div class="card-title-row">' +
+          '<p class="card-title">' + esc(p.name) + '</p>' +
+          '<svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>' +
+        '</div>' +
+        '<div class="badge-row">' + badges.join('') + '</div>' +
+        '<p class="brief">' + esc(p.details || 'No description yet.') + '</p>' +
+        '<div class="meta-row">' +
+          '<span>👤 ' + (p.owner
+            ? '<b>' + esc(p.owner) + '</b>'
+            : '<span class="none">Nobody named</span>') + '</span>' +
+          '<span>🏫 <b>' + esc(p.group || '—') + '</b></span>' +
+          ((p.contributors || []).length ? '<span>👥 ' + esc(p.contributors.join(', ')) + '</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="details"><div class="details-inner">' +
+        '<div class="detail-item"><span class="k">Open items (' + p.openCount + ')</span>' + itemsHtml + '</div>' +
+        (closedBtn ? '<div class="detail-item">' + closedBtn + '</div>' : '') +
+        (p.costs && p.costs !== 'None'
+          ? '<div class="detail-item"><span class="k">Other costs</span><span class="v">' + esc(p.costs) + '</span></div>' : '') +
+        '<div class="detail-item"><span class="k">Links</span><div class="link-row">' +
+          (p.suggestUrl
+            ? '<a class="link-btn suggest" href="' + esc(p.suggestUrl) + '" target="_blank" rel="noopener">' +
+              '💡 ' + (p.hasOwnTab ? 'Suggest here' : 'Suggest on the tracker') + ' ↗</a>'
+            : '') +
+          link(p.sheetUrl, '📄 Sheet') + link(p.appUrl, '🌐 Web app') + link(p.docsUrl, '📘 Docs') +
+        '</div></div>' +
+      '</div></div>' +
+    '</div>';
+  }).join('');
+
+  showEmpty(rows.length, VIEW);
+}
+
+function showEmpty(count, view) {
+  var el = document.getElementById('emptyState');
+  if (count) { el.innerHTML = ''; return; }
+
+  var msg = view === 'items'
+    ? { big: 'Nothing open here.',
+        small: 'Either the triage is keeping up, or nobody is raising anything. ' +
+               'Worth knowing which. Clear the filters to see everything.' }
+    : { big: 'No projects match those filters.',
+        small: 'Try clearing the search box or the group filter.' };
+
+  el.innerHTML = '<div class="empty-state"><div class="big">' + msg.big + '</div>' +
+                 '<div class="small">' + msg.small + '</div></div>';
+}
+
+function toggleCard(id) {
+  document.getElementById(id).classList.toggle('expanded');
+}
+
+/* Closed items are fetched only when asked for, so the initial payload stays
+   flat as suggestions pile up over the years. */
+function loadClosed(idx, btn) {
+  var p = filteredProjectAt(idx);
+  if (!p) return;
+  var box = document.getElementById('closed-' + idx);
+
+  if (closedCache[p.name]) {
+    var open = box.innerHTML !== '';
+    box.innerHTML = open ? '' : renderClosed(closedCache[p.name]);
+    btn.textContent = open ? 'Show ' + p.closedCount + ' closed' : 'Hide closed';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+  google.script.run
+    .withSuccessHandler(function (list) {
+      closedCache[p.name] = list || [];
+      box.innerHTML = renderClosed(closedCache[p.name]);
+      btn.disabled = false;
+      btn.textContent = 'Hide closed';
+    })
+    .withFailureHandler(function () {
+      btn.disabled = false;
+      btn.textContent = 'Could not load — tap to retry';
+    })
+    .getClosedForProject(p.name);
+}
+
+/* The grid is filtered, so index N on screen is not index N in SNAP. */
+function filteredProjectAt(idx) { return filteredProjects()[idx]; }
+
+function renderClosed(list) {
+  if (!list.length) return '<span class="muted">Nothing closed yet.</span>';
+  return '<div class="item-list" style="margin-top:8px">' + list.map(function (i) {
+    var sb = itemStatusBadge(i.status);
+    return '<div class="item">' +
+      '<div class="item-top"><p class="item-title">' + esc(i.suggestion) + '</p>' +
+      '<span class="item-age">' + esc(i.resolvedOn || '') + '</span></div>' +
+      '<div class="item-meta">' +
+        '<span class="badge ' + sb[0] + '">' + sb[1] + ' ' + esc(i.status) + '</span>' +
+        (i.submittedBy ? '<span class="badge b-stale">' + esc(i.submittedBy) + '</span>' : '') +
+        (i.archived ? '<span class="badge b-stale">archived</span>' : '') +
+      '</div>' +
+      (i.note ? '<div class="item-note"><b>ICT:</b> ' + esc(i.note) + '</div>' : '') +
+    '</div>';
+  }).join('') + '</div>';
+}
+
+// ---------- refresh ----------
+
+function refreshData() {
+  var btn = document.getElementById('refreshBtn');
+  btn.classList.add('loading');
+  btn.disabled = true;
+  google.script.run
+    .withSuccessHandler(function (fresh) {
+      if (fresh) { SNAP = fresh; closedCache = {}; boot(); }
+      btn.classList.remove('loading');
+      btn.disabled = false;
+    })
+    .withFailureHandler(function () {
+      btn.classList.remove('loading');
+      btn.disabled = false;
+      alert('Could not refresh. The page you are looking at is still the last good data.');
+    })
+    .getFreshData();
+}
+
+// ---------- boot ----------
+
+function boot() {
+  buildHeader();
+  buildFilters();
+  setView(VIEW);
+}
+
+boot();
+</script>
