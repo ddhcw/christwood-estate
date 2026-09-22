@@ -24,12 +24,12 @@ current UTC time into that zone first, then ask: is now between the most recent
 `start` and the `end` that follows it?
 
 The window crosses midnight and a day boundary, so do not compare day names
-alone. Worked example for the default Thursday 19:00 → Saturday 07:00:
+alone. Worked example for the default Thursday 20:00 → Saturday 08:00:
 
-- Friday 02:00 IST → inside (after Thursday 19:00, before Saturday 07:00)
-- Saturday 06:59 IST → inside
-- Saturday 07:01 IST → outside
-- Thursday 18:59 IST → outside
+- Friday 02:00 IST → inside (after Thursday 20:00, before Saturday 08:00)
+- Saturday 07:59 IST → inside
+- Saturday 08:01 IST → outside
+- Thursday 19:59 IST → outside
 - Monday any time → outside
 
 If `override_until` is set and the current time is before it, the window is
