@@ -35,6 +35,9 @@
     <button class="tab" id="tab-projects" role="tab" onclick="setView('projects')">
       Projects <span class="cnt" id="cnt-projects">0</span>
     </button>
+    <button class="tab" id="tab-runs" role="tab" onclick="setView('runs')">
+      Automated runs <span class="cnt" id="cnt-runs">0</span>
+    </button>
   </div>
 
   <div class="controls">
@@ -47,6 +50,8 @@
   </div>
 
   <div class="chip-row" id="filterChips"></div>
+
+  <div id="viewRuns" style="display:none"></div>
 
   <div id="viewProjects" style="display:none">
     <div class="grid" id="cardGrid"></div>

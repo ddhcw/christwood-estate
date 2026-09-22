@@ -9,7 +9,7 @@
  * the Sheets, which is also where they are already working.
  */
 
-var SNAP = { projects: [], items: [], stats: {} };
+var SNAP = { projects: [], items: [], runs: [], stats: {} };
 try { SNAP = JSON.parse(document.getElementById('tracker-data').textContent || '{}'); } catch (e) {}
 
 var VIEW = 'projects';
@@ -20,7 +20,7 @@ var closedCache = {};
    which is what the page is for when the CEO opens it. */
 try {
   var saved = localStorage.getItem('cw_tracker_view');
-  if (saved === 'items' || saved === 'projects') VIEW = saved;
+  if (saved === 'items' || saved === 'projects' || saved === 'runs') VIEW = saved;
 } catch (e) {}
 
 // ---------- helpers ----------
@@ -89,6 +89,7 @@ function buildHeader() {
 
   document.getElementById('cnt-items').textContent = (SNAP.items || []).length;
   document.getElementById('cnt-projects').textContent = (SNAP.projects || []).length;
+  document.getElementById('cnt-runs').textContent     = (SNAP.runs || []).length;
 
   /* Honest state: a dead sync should be visible on the page, not inferred from
      suggestions mysteriously drying up. */
@@ -172,10 +173,14 @@ function setView(v) {
   try { localStorage.setItem('cw_tracker_view', v); } catch (e) {}
   document.getElementById('tab-items').setAttribute('aria-selected', v === 'items');
   document.getElementById('tab-projects').setAttribute('aria-selected', v === 'projects');
+  document.getElementById('tab-runs').setAttribute('aria-selected', v === 'runs');
   document.getElementById('viewItems').style.display    = v === 'items' ? 'block' : 'none';
   document.getElementById('viewProjects').style.display = v === 'projects' ? 'block' : 'none';
+  document.getElementById('viewRuns').style.display     = v === 'runs' ? 'block' : 'none';
   document.getElementById('searchInput').placeholder =
-    v === 'items' ? 'Search open items…' : 'Search by name, group, owner…';
+    v === 'items' ? 'Search open items…'
+    : v === 'runs' ? 'Search runs by project, ref or ticket…'
+    : 'Search by name, group, owner…';
   buildChips();
   render();
 }
@@ -184,6 +189,7 @@ function setView(v) {
 
 function render() {
   if (VIEW === 'items') renderItems();
+  else if (VIEW === 'runs') renderRuns();
   else renderProjects();
 }
 
@@ -353,7 +359,11 @@ function showEmpty(count, view) {
   var el = document.getElementById('emptyState');
   if (count) { el.innerHTML = ''; return; }
 
-  var msg = view === 'items'
+  var msg = view === 'runs'
+    ? { big: 'No automated runs yet.',
+        small: 'The agent works Thursday 20:00 to Saturday 08:00. Anything it ' +
+               'builds appears here. Approving happens in the Sheet, not on this page.' }
+    : view === 'items'
     ? { big: 'Nothing open here.',
         small: 'Either the triage is keeping up, or nobody is raising anything. ' +
                'Worth knowing which. Clear the filters to see everything.' }
@@ -448,3 +458,56 @@ function boot() {
 
 boot();
 </script>
+
+
+/* ---------------------------------------------------------------
+   Automated runs — READ ONLY, on purpose.
+
+   This page is deployed ANYONE_ANONYMOUS and cannot tell who is
+   looking, so it must not offer an action only one person may take.
+   Approving happens in the Sheet, in a column protected to Leads,
+   where Google enforces it. Everyone may read this; nobody can act
+   on it from here. See docs/rfcs/RFC-0003.
+   --------------------------------------------------------------- */
+
+var RUN_TONE = {
+  'Live':        'ok',    'Pushed':     'ok',
+  'Deploying':   'pend',  'Ready':      'pend',
+  'Not ready':   'stale', 'Rolled back':'stale',
+  'Refused':     'err',   'Failed':     'err'
+};
+
+function renderRuns() {
+  var q = (document.getElementById('searchInput').value || '').toLowerCase();
+  var rows = (SNAP.runs || []).filter(function (r) {
+    if (!q) return true;
+    return [r.project, r.ref, r.ticket, r.state].join(' ').toLowerCase().indexOf(q) !== -1;
+  });
+
+  var host = document.getElementById('viewRuns');
+  if (!rows.length) { host.innerHTML = ''; showEmpty(0, 'runs'); return; }
+  showEmpty(1, 'runs');
+
+  host.innerHTML = rows.map(function (r) {
+    var tone = RUN_TONE[r.state] || 'stale';
+    return '' +
+      '<article class="run ' + tone + '">' +
+        '<header class="run-head">' +
+          '<span class="run-proj">' + esc(r.project || '—') + '</span>' +
+          '<span class="pill ' + tone + '">' + esc(r.state || 'Unknown') + '</span>' +
+        '</header>' +
+        '<div class="run-meta">' +
+          esc(r.date || '') +
+          (r.ref    ? ' · ' + esc(r.ref) : '') +
+          (r.ticket ? ' · ' + esc(r.ticket) : '') +
+          (r.pr     ? ' · <a href="' + esc(r.prLink) + '" target="_blank" rel="noopener">PR #' + esc(r.pr) + '</a>' : '') +
+        '</div>' +
+        (r.actions ? '<p class="run-body">' + esc(r.actions) + '</p>' : '') +
+        (r.unverified
+          ? '<details class="run-unver"><summary>What it could not check</summary><p>' +
+              esc(r.unverified) + '</p></details>'
+          : '') +
+        (r.note ? '<p class="run-note">' + esc(r.note) + '</p>' : '') +
+      '</article>';
+  }).join('');
+}

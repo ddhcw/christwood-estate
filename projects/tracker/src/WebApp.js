@@ -108,6 +108,40 @@ function getClosedForProject(projectName) {
 
 // ---------- Snapshot ----------
 
+/**
+ * Automated Runs for the dashboard — read only, and deliberately stripped.
+ *
+ * The Approve and Rollback columns are NOT returned. The page is anonymous and
+ * cannot know who is looking (see the note at the top of this file), so it must
+ * not show an action only a Lead may take. Approval lives in the Sheet, in a
+ * protected column. RFC-0003.
+ */
+function readRunsForSnapshot_(ss) {
+  var sheet = ss.getSheetByName('Automated Runs');
+  if (!sheet || sheet.getLastRow() < 2) return [];
+
+  var t = readTable_(sheet), out = [];
+  t.rows.forEach(function (r) {
+    if (isBlankRow_(r)) return;
+    out.push({
+      date:       str_(t, r, 'Run date'),
+      project:    str_(t, r, 'Project'),
+      ref:        str_(t, r, 'Ref'),
+      ticket:     str_(t, r, 'Ticket'),
+      pr:         str_(t, r, 'PR'),
+      prLink:     str_(t, r, 'PR link'),
+      actions:    str_(t, r, 'Actions taken'),
+      unverified: str_(t, r, 'Could not verify'),
+      state:      str_(t, r, 'Deploy state') || 'Not ready',
+      note:       str_(t, r, 'Deploy note')
+    });
+  });
+
+  // Newest first — the thing you came to look at is the thing that just ran.
+  out.sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
+  return out;
+}
+
 function clearBootstrapCache_() {
   CacheService.getScriptCache().remove(CONFIG.CACHE.BOOTSTRAP);
 }
@@ -260,6 +294,7 @@ function buildSnapshot_() {
     staleDays: staleDays,
     projects: out,
     items: items,
+    runs: readRunsForSnapshot_(ss),
     stats: {
       total:      out.length,
       launched:   out.filter(function (p) { return /launch(ed)?|live/i.test(p.status); }).length,
