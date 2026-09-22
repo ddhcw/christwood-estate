@@ -1,15 +1,17 @@
 {
   "agent_enabled": true,
   "timezone": "Asia/Kolkata",
-
   "weekly_window": {
-    "start": { "day": "Thursday", "time": "19:00" },
-    "end":   { "day": "Saturday", "time": "07:00" }
+    "start": {
+      "day": "Thursday",
+      "time": "20:00"
+    },
+    "end": {
+      "day": "Saturday",
+      "time": "08:00"
+    }
   },
-
   "override_until": null,
-
   "max_tickets_per_run": 1,
-
-  "note": "The window recurs every week and needs no editing. The routine computes whether the current instant falls inside THIS week's window. 'override_until' is an optional one-off timestamp that EXTENDS the window (e.g. '2026-09-22T18:00:00+05:30' to keep working into Tuesday); null means no override. Set agent_enabled false to stop everything regardless."
+  "note": "The window recurs every week and needs no editing. The routine computes whether the current instant falls inside THIS week's window. 'override_until' is an optional one-off timestamp that EXTENDS the window; null means no override. Set agent_enabled false to stop everything regardless. Changed 2026-09-22 from Thu 19:00-Sat 07:00 to Thu 20:00-Sat 08:00."
 }
