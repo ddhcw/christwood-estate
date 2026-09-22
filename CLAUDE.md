@@ -53,3 +53,25 @@ suggestion → RFC (if non-trivial) → ticket → branch → PR → human revie
 Primary blue `#1e3a5f`, gold `#d4a853`. Status vocabulary: Pending amber ·
 Done green · Error red · Stale grey, colour always paired with icon or text.
 Mobile-first ~360px, ≥44px targets. Never a blank page.
+
+## What is and is not in this repo
+
+This monorepo holds **only the projects that had no repository of their own**:
+`purchase`, `transport`, `calllog`.
+
+Everything else in the estate lives in **one repo per project**, named
+`ddhcw/christwood-<project>`:
+
+| Project | Repo |
+|---|---|
+| Projects Tracker | `ddhcw/christwood-projects-tracker` |
+| Oasis IEP System | `ddhcw/christwood-oasis` |
+
+**Do not add a project here that already has a repo.** The tracker was
+mistakenly copied in on 2026-09-19 and removed on 2026-09-22; for three days
+two sources of truth existed for one script, and a `clasp push` from the wrong
+one would have reverted work that was already live.
+
+Before onboarding any project, check the `GitHub Repo` column on the tracker's
+main tab, and check for a `.git` directory in the project folder. Folder names
+with spaces are easy to miss — `Projects Tracker/` was.
