@@ -364,6 +364,7 @@ function getDashboardData(token) {
   const unassessable = computeUnassessable_(result.byVehicle, result.regOf, settings);
   const expiries = upcomingExpiries_(result.regOf, settings);
   const state = fleetStateLists_();
+  const duplicateFuel = duplicateFuelGroups_();
 
   const thisMonth = monthKey_(new Date());
   const totals = monthTotals_(result.rows, thisMonth);
@@ -400,7 +401,8 @@ function getDashboardData(token) {
     offRoad: state.offRoad,
     odoDown: state.odoDown,
     perVehicle: perVehicle,
-    expiries: expiries
+    expiries: expiries,
+    duplicateFuel: duplicateFuel
   };
 }
 

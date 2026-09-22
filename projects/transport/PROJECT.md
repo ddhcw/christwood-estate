@@ -28,9 +28,9 @@ confirmed identical to the local working copy. Per shipping standards §2:
 | `Data.js` | Sheet reads/writes |
 | `Admin.js` / `AdminLogin.html` / `*Admin.html` | Admin surfaces |
 | `Attendance.js` / `AttendanceForm.html` | Driver attendance |
-| `FuelReport.js` / `FuelForm.html` | Fuel entry and reporting |
+| `FuelReport.js` / `FuelForm.html` | Fuel entry and reporting, incl. read-only duplicate-entry detection (`duplicateFuelGroups_()`) |
 | `MaintenanceForm.html` / `DocForm.html` / `TripForm.html` | Entry forms |
-| `Analytics.js` / `Reports.js` / `Dashboard.html` | Dashboard and reporting |
+| `Analytics.js` / `Reports.js` / `Dashboard.html` | Dashboard and reporting — `getDashboardData()` also returns `duplicateFuel` groups, rendered as a dashboard card in `Script.html` |
 | `Setup.js` | Idempotent sheet setup |
 | `Triggers.js` | Time-driven triggers |
 | `Index/Script/Styles.html` | Shared web app shell |
@@ -43,3 +43,10 @@ confirmed identical to the local working copy. Per shipping standards §2:
 - `FixEntries.html` exists to repair bad rows. If a change can create bad rows,
   it needs a matching repair path, per shipping standards §6 (every automated
   job needs a manual on-demand twin).
+- Duplicate fuel detection (`duplicateFuelGroups_()`) excludes voided rows
+  (`isVoided_(r)`), matching the convention already used by `findDuplicate_`
+  elsewhere: a voided row is treated as already human-resolved, so re-flagging
+  it would be misleading. This is read-only — it flags, it never merges or
+  deletes. If one side of a flagged pair later gets voided via Fix Entries,
+  the cluster disappears from the dashboard on the next load; that's expected
+  self-resolution, not a bug.
