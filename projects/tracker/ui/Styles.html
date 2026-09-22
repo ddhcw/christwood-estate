@@ -157,4 +157,31 @@
     .stat-row{grid-template-columns:repeat(2,1fr);}
     .tab{font-size:12.5px;}
   }
+
+  /* Automated runs — read-only list. Status colour is never the only signal:
+     every pill carries its word, and the card keeps its own left rule. */
+  .run{background:var(--surface,#fff);border:1px solid var(--line,#e3e6ea);
+       border-left:3px solid var(--neutral-dark,#8b9099);border-radius:8px;
+       padding:12px 14px;margin-bottom:10px;}
+  .run.ok{border-left-color:#1b8a3f;} .run.pend{border-left-color:#c98a00;}
+  .run.err{border-left-color:#c62828;} .run.stale{border-left-color:#8b9099;}
+  .run-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px;}
+  .run-proj{font-weight:650;color:var(--ink);font-size:13.5px;}
+  .run-meta{font-size:12px;color:var(--neutral-dark);margin-bottom:8px;}
+  .run-meta a{color:inherit;}
+  .run-body{font-size:12.5px;line-height:1.6;margin:0 0 8px;white-space:pre-wrap;}
+  .run-note{font-size:12px;color:var(--neutral-dark);margin:8px 0 0;
+            padding-top:8px;border-top:1px dashed var(--line,#e3e6ea);}
+  .run-unver summary{font-size:12px;font-weight:600;cursor:pointer;
+                     color:#8a5a00;padding:4px 0;min-height:44px;
+                     display:flex;align-items:center;}
+  .run-unver p{font-size:12px;line-height:1.6;white-space:pre-wrap;
+               background:#fdf7e8;border-radius:6px;padding:10px;margin:0 0 4px;}
+  .pill{font-size:11px;font-weight:650;padding:3px 9px;border-radius:999px;
+        border:1px solid transparent;white-space:nowrap;}
+  .pill.ok{background:#d7efdc;color:#0b5c26;border-color:#a9d9b8;}
+  .pill.pend{background:#fdf0d0;color:#7a4f01;border-color:#e8cf95;}
+  .pill.err{background:#fbdcdc;color:#8c1c1c;border-color:#efb7b7;}
+  .pill.stale{background:#ebedf0;color:#4a4f57;border-color:#d4d8de;}
+  @media (max-width:420px){ .run{padding:11px 12px;} }
 </style>

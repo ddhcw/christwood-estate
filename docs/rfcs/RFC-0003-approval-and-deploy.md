@@ -1,6 +1,6 @@
 # RFC-0003 — Automated Runs tab, approval, and gated deploy
 
-**Status:** 🚧 Draft — three open questions for Dan
+**Status:** ✅ **Accepted** (2026-09-22, Dan answered all three)
 **Project:** `projects/tracker/` (plus a new deploy path into every project)
 **Author:** Dan + Claude · **Created:** 2026-09-22
 
@@ -113,9 +113,14 @@ The deploy job refuses unless **all** of these hold:
 Content is fetched **from GitHub at the merge SHA**, never from a working copy.
 The bytes deployed are the bytes reviewed.
 
-## Two-stage deploy
+## One-stage deploy (as decided)
 
-**Approve → push to HEAD only. Live stays untouched.**
+**Approve → merge the PR → push → new version → live deployment repointed.**
+
+The section below records the two-stage design that was *rejected*, because the
+reasoning still governs the rollback and SHA requirements above.
+
+### Rejected: two-stage
 
 Apps Script separates HEAD from versioned deployments. `clasp push` updates HEAD;
 the live `/exec` URL keeps serving its pinned version until someone promotes it.
@@ -179,18 +184,45 @@ even if a row is later edited.
 - Does not touch any project not in `projects/` with a committed `.clasp.json`.
 - Does not run tests. There are none to run.
 
-## Open questions
+## Decisions (Dan, 2026-09-22)
 
-1. **Two-stage or one?** Approve → HEAD, then a separate Promote → live (my
-   recommendation), or Approve → straight to live?
-2. **Merged-only, or approve-before-merge?** Requiring a merged PR means Dan
-   merges in GitHub *then* ticks in the Sheet — two places. The alternative is
-   letting the deploy job merge the PR itself on approval, making the Sheet the
-   single surface. That is more convenient and gives the Sheet authority over
-   the repo, which every design so far has deliberately avoided.
-3. **Which projects may auto-deploy?** All of `projects/`, or an allowlist in
-   Config? `tracker` deploying itself is a particular hazard — a bad push
-   breaks the thing that does the pushing.
+| # | Question | Answer |
+|---|---|---|
+| 1 | Two-stage or one? | **One stage.** Approve → merged, pushed, and live. |
+| 2 | Where does Dan work? | **The Sheet, only.** The deploy job merges the PR itself. |
+| 3 | Which projects may deploy? | **Every deployment requires Dan's approval** — no project is exempt from the gate. `tracker` is excluded from deploying *itself*; see below. |
+
+### Consequences of one-stage
+
+Approved code reaches staff within the hour, without anyone having executed it
+— the agent states in every PR that it ran nothing. The `/dev` test step in
+`docs/WEEKLY-SPRINT.md` is no longer on the path; the review of the diff and the
+"Could not verify" section is the whole check.
+
+Dan has decided this, and it is implemented. Two things therefore become
+load-bearing rather than nice to have:
+
+- **Rollback.** Every deploy captures the target's current content first and
+  stores the version number it replaced. A `Rollback` checkbox restores the
+  previous version and repoints the live deployment. One stage in, one stage
+  out.
+- **The SHA check.** With no `/dev` pause, the only guarantee that deployed
+  bytes are reviewed bytes is that the merge SHA still matches what Dan saw.
+
+### The tracker does not deploy itself
+
+`tracker` is excluded from the deploy job. A bad push to `Deploy.js` would break
+the mechanism doing the pushing, and the recovery would be hand-editing in the
+Apps Script editor with no working rollback. Tracker changes stay a manual
+`clasp push`. Everything else in `projects/` is eligible, still gated on the
+tick.
+
+### Sheet authority over the repo
+
+Ticking Approve now merges a pull request. The Sheet has been read-only with
+respect to the repo until now, deliberately. This is a real inversion, accepted
+knowingly: the protected column is Lead-only and Google-enforced, the merge is
+recorded in the Audit Log and in GitHub, and a merge is revertable.
 
 ## Setup this will need from Dan
 
