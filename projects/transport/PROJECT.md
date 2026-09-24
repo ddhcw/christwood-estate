@@ -28,7 +28,7 @@ confirmed identical to the local working copy. Per shipping standards §2:
 | `Data.js` | Sheet reads/writes |
 | `Admin.js` / `AdminLogin.html` / `*Admin.html` | Admin surfaces |
 | `Attendance.js` / `AttendanceForm.html` | Driver attendance |
-| `FuelReport.js` / `FuelForm.html` | Fuel entry and reporting, incl. read-only duplicate-entry detection (`duplicateFuelGroups_()`) |
+| `FuelReport.js` / `FuelForm.html` | Fuel entry and reporting, incl. read-only duplicate-entry detection (`duplicateFuelGroups_()`). Since TICKET-0006 the generated report has no route-number column. |
 | `MaintenanceForm.html` / `DocForm.html` / `TripForm.html` | Entry forms |
 | `Analytics.js` / `Reports.js` / `Dashboard.html` | Dashboard and reporting — `getDashboardData()` also returns `duplicateFuel` groups, rendered as a dashboard card in `Script.html` |
 | `Setup.js` | Idempotent sheet setup |
@@ -50,3 +50,12 @@ confirmed identical to the local working copy. Per shipping standards §2:
   deletes. If one side of a flagged pair later gets voided via Fix Entries,
   the cluster disappears from the dashboard on the next load; that's expected
   self-resolution, not a bug.
+- The fuel report PDF (`FuelReport.js`) has **no route-number column**
+  (removed by TICKET-0006, which supersedes TICKET-0002). This was deliberate,
+  not a regression: the `routeOf` lookup, the `route_no` field on report rows,
+  the `'Route No'` header, and its entry in the `widths` array were all removed
+  together so the table stays aligned. Route numbers on vehicles, drivers,
+  roster and attendance (`VehicleAdmin.html`, `DriverAdmin.html`,
+  `Attendance.js`, `AttendanceForm.html`, roster views in `Script.html`) are a
+  separate, unrelated lookup and were untouched — do not conflate the two if a
+  future ticket asks about "route numbers" again.
