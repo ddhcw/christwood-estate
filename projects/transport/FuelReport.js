@@ -439,7 +439,7 @@ function duplicateFuelGroups_() {
 function styleReportTable_(table, hasTotalRow) {
   table.setBorderWidth(1);
   const totalRowIdx = hasTotalRow ? table.getNumRows() - 1 : -1;
-  // Sums to 734pt, just inside the 736pt of usable width (792 less two 28pt
+  // Sums to 690pt, within the 736pt of usable width (792 less two 28pt
   // margins). Driver Name is the widest because real names here run to about
   // 24 characters, and a wrapped name doubles its row's height.
   const widths = [28, 76, 42, 60, 36, 52, 118, 62, 48, 90, 40, 38];
