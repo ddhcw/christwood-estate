@@ -50,6 +50,7 @@ None of these are pushed to Apps Script (see `.claspignore`).
 
 | Path | What it is |
 |---|---|
+| `docs/SETUP-GUIDE.md` | Setup guide for the current version (sheet setup, deployment, admin PIN). |
 | `docs/fleet-data-project-note.md` | Original Phase 1 scoping note (from the transport-in-charge's list, June 2026). |
 | `docs/expansion/` | Phase 2 plan: parent-facing live tracking. Plan, leadership one-pager, `make-pdf.sh`. |
 | `reference/` | Office source material: fuel process PDFs. The attendance CSV is student/driver data and is gitignored. Don't commit it. |
