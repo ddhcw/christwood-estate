@@ -1,0 +1,62 @@
+<div class="card" id="form-trip">
+  <h2>🚌 Add a trip</h2>
+  <p class="muted" style="margin-top:-6px">For special trips (sports, field, staff) or any run where you note opening &amp; closing km.</p>
+
+  <div class="two">
+    <div class="field">
+      <label class="req">Vehicle</label>
+      <select class="js-vehicle" data-field="vehicle_id" onchange="onVehicleChange('trip')"></select>
+    </div>
+    <div class="field">
+      <label>Driver</label>
+      <select class="js-driver" data-field="driver_id"></select>
+    </div>
+  </div>
+  <div class="hint" id="odoHint-trip"></div>
+  <div id="orNudge-trip"></div>
+
+  <div class="two">
+    <div class="field">
+      <label class="req">Date</label>
+      <input type="date" class="js-today" data-field="date">
+    </div>
+    <div class="field">
+      <label>Purpose</label>
+      <select class="js-choice" data-choice="purpose" data-field="purpose"></select>
+    </div>
+  </div>
+
+  <div class="two js-odo-field">
+    <div class="field">
+      <label class="req js-odo-label">Opening odo (km)</label>
+      <input type="number" inputmode="numeric" data-field="open_odo" oninput="tripDistance()">
+    </div>
+    <div class="field">
+      <label class="req js-odo-label">Closing odo (km)</label>
+      <input type="number" inputmode="numeric" data-field="close_odo" oninput="tripDistance()">
+    </div>
+  </div>
+  <div class="hint" id="tripDist">Distance will show here.</div>
+  <button type="button" class="linkbtn js-odo-toggle" onclick="odoToggle('trip')">Odometer not working?</button>
+
+  <div class="two">
+    <div class="field">
+      <label>Start time</label>
+      <input type="time" data-field="start_time">
+    </div>
+    <div class="field">
+      <label>End time</label>
+      <input type="time" data-field="end_time">
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Entered by</label>
+    <select class="js-staff" data-field="entered_by"></select>
+  </div>
+
+  <button class="btn" id="savebtn-trip" onclick="saveTrip()">Save trip</button>
+  <div class="editbar" id="editbar-trip">
+    <button class="btn danger" id="voidbtn-trip" onclick="voidCurrent('trip')">Void this entry</button>
+  </div>
+</div>

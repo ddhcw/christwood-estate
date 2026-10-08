@@ -43,3 +43,16 @@ confirmed identical to the local working copy. Per shipping standards §2:
 - `FixEntries.html` exists to repair bad rows. If a change can create bad rows,
   it needs a matching repair path, per shipping standards §6 (every automated
   job needs a manual on-demand twin).
+
+## Other files in this folder
+
+None of these are pushed to Apps Script (see `.claspignore`).
+
+| Path | What it is |
+|---|---|
+| `docs/fleet-data-project-note.md` | Original Phase 1 scoping note (from the transport-in-charge's list, June 2026). |
+| `docs/expansion/` | Phase 2 plan: parent-facing live tracking. Plan, leadership one-pager, `make-pdf.sh`. |
+| `reference/` | Office source material: fuel process PDFs. The attendance CSV is student/driver data and is gitignored. Don't commit it. |
+| `archive/src-2026-07-30/` | Code snapshot from 30 July, before attendance and the fuel report were added. Read-only. |
+
+Merged here 2026-10-08 from the old local `Christwood/transport*` folders.
