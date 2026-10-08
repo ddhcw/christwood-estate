@@ -3,7 +3,8 @@
  * CHRISTWOOD PURCHASE REQUEST SYSTEM — Notification Service
  * ═══════════════════════════════════════════════════════════════
  * Sends HTML-formatted email notifications at various stages.
- * Currently implements submission notifications only.
+ * Implements submission notifications and the Admin Head / CEO
+ * approval notification (TICKET-0001 / RFC-0001).
  * ═══════════════════════════════════════════════════════════════
  */
 /**
@@ -48,14 +49,55 @@ function sendSubmissionNotification(data) {
   Logger.log('Submission notification sent to: ' + recipientStr);
 }
 /**
- * Builds the HTML content for the submission notification email.
+ * Sends an email notification to the Admin Head and CEO so a submitted
+ * purchase request can be approved. Fired alongside the submission
+ * notification, on the same event.
+ *
+ * @param {Object} data - Request data (same shape as sendSubmissionNotification)
+ */
+function sendApprovalNotification(data) {
+  var recipients = mergeRecipientsCaseInsensitive_(
+    getNotificationRecipients('adminHead'),
+    getNotificationRecipients('ceo')
+  );
+  if (recipients.length === 0) {
+    Logger.log('No approval notification recipients configured.');
+    return;
+  }
+  var config = getConfig();
+  var webAppUrl = '';
+  try {
+    webAppUrl = ScriptApp.getService().getUrl();
+  } catch (e) {
+    webAppUrl = '';
+  }
+  var viewUrl = webAppUrl ? webAppUrl + '?page=print&id=' + encodeURIComponent(data.requestId) : '';
+  var subject = '✅ Approval Needed: Purchase Request ' + data.requestId + ' — ' + data.staffName + ' (' + data.department + ')';
+  var html = buildNotificationHtml_(data, config, viewUrl, 'APPROVAL REQUESTED — PURCHASE REQUEST');
+  // Send to all recipients
+  var recipientStr = recipients.join(',');
+  MailApp.sendEmail({
+    to: recipientStr,
+    subject: subject,
+    htmlBody: html,
+    noReply: true,
+    name: config.schoolName + ' Purchase System'
+  });
+  Logger.log('Approval notification sent to: ' + recipientStr);
+}
+/**
+ * Builds the HTML content for a notification email.
  * @param {Object} data
  * @param {Object} config
  * @param {string} viewUrl
+ * @param {string} [subtitle] - Lead line under the school name; defaults to
+ *     the original submission-notification copy so existing callers are
+ *     unaffected.
  * @return {string} HTML email content
  * @private
  */
-function buildNotificationHtml_(data, config, viewUrl) {
+function buildNotificationHtml_(data, config, viewUrl, subtitle) {
+  subtitle = subtitle || 'PURCHASE REQUEST NOTIFICATION';
   var itemsHtml = '';
   for (var i = 0; i < data.items.length; i++) {
     var item = data.items[i];
@@ -82,7 +124,7 @@ function buildNotificationHtml_(data, config, viewUrl) {
       '<h1 style="margin:0;color:#ffffff;font-size:18px;font-weight:600;letter-spacing:0.5px;">' +
         escapeHtml_(config.schoolName).toUpperCase() +
       '</h1>' +
-      '<p style="margin:6px 0 0;color:#a8b3cc;font-size:13px;letter-spacing:1px;">PURCHASE REQUEST NOTIFICATION</p>' +
+      '<p style="margin:6px 0 0;color:#a8b3cc;font-size:13px;letter-spacing:1px;">' + escapeHtml_(subtitle) + '</p>' +
     '</div>' +
     // Body
     '<div style="background:#ffffff;padding:36px;border-radius:0 0 16px 16px;box-shadow:0 4px 24px rgba(0,0,0,0.06);">' +
@@ -158,6 +200,27 @@ function buildNotificationHtml_(data, config, viewUrl) {
 // ─────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────
+/**
+ * Merges two recipient email lists, de-duplicating case-insensitively.
+ * @param {string[]} listA
+ * @param {string[]} listB
+ * @return {string[]}
+ * @private
+ */
+function mergeRecipientsCaseInsensitive_(listA, listB) {
+  var seen = {};
+  var result = [];
+  var combined = listA.concat(listB);
+  for (var i = 0; i < combined.length; i++) {
+    var email = combined[i];
+    var key = email.toLowerCase().trim();
+    if (key && !seen[key]) {
+      seen[key] = true;
+      result.push(email);
+    }
+  }
+  return result;
+}
 /**
  * Escapes HTML special characters.
  * @param {string} str
