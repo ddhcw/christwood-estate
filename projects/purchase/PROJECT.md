@@ -12,6 +12,7 @@ purchase requests.
 |---|---|
 | Script ID | `1w-V1fijdqj-9EzvPQLvbhGMu38mgFI5L6EvVkJ0vLbz3v4fVEAxbUi25` |
 | Spreadsheet | `1jkGOTo4haveVCLb6puRPyNEG7rceMKtSXo7za76FBPY` |
+| Runs as | `automations@christwood.edu.in` — deploying from any other account switches who the app runs as (RFC-0004) |
 | Web app | see the Projects Tracker row for the current `/exec` URL |
 
 ## Source of truth
@@ -44,6 +45,11 @@ Any live patch must be `clasp pull`ed back and reconciled before the next push.
 
 ## Footguns
 
+- **Runs as `automations@christwood.edu.in` (RFC-0004).** The web app is
+  `executeAs: USER_DEPLOYING`: deploying from any other account switches who
+  the app runs as. Only automations@ may update the live deployment, by
+  editing it in place (Manage deployments → edit → New version) so the link
+  never changes. The tracker's deploy job refuses to deploy otherwise.
 - **`onPrincipalEmails` and `onRejectionEmails` are read by
   `getNotificationRecipients()` but nothing calls those stages.** They remain
   unwired. As of TICKET-0001, `onCEOEmails` and `onAdminHeadEmails` **are**

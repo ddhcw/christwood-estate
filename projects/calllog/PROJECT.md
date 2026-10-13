@@ -12,6 +12,7 @@ lookup against student/parent and staff data.
 |---|---|
 | Script ID | `1ZRksfK1GVuFBE5XZ6rDCTTpGDJB_FQqPMH6ULqueXA7MNdJrmBZBZVCP` |
 | Spreadsheet | `18FQMs3HRmr9UJD9aILMtCtQjWQ5hlSEAwv7bGJXm_T4` |
+| Runs as | `automations@christwood.edu.in` — deploying from any other account switches who the app runs as (RFC-0004) |
 
 ## Source of truth
 
@@ -31,6 +32,14 @@ data. If the phone never sent it, no amount of Apps Script is the fix.
 
 This is the single most likely way an autonomous change to this project goes
 wrong: writing plausible server-side code for a client-side failure.
+
+## Footguns
+
+- **Runs as `automations@christwood.edu.in` (RFC-0004).** The web app is
+  `executeAs: USER_DEPLOYING`: deploying from any other account switches who
+  the app runs as. Only automations@ may update the live deployment, by
+  editing it in place (Manage deployments → edit → New version) so the link
+  never changes. The tracker's deploy job refuses to deploy otherwise.
 
 ## Structure
 
