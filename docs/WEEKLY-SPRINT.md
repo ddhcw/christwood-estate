@@ -7,7 +7,19 @@ Saturday morning you review what it produced. This is that routine.
 
 ## Before Thursday evening — queue the work
 
-Until the Sheet→GitHub sync exists (PRD Phase 2), this step is manual.
+**Normal path — nothing to do but queue it.** In the tracker, set a row's
+Status to "Queued for agent" and Assignee to "Claude". Thursday 18:00 the sync
+opens the issue **with `approved`** (Config `agent_auto_approve`, default TRUE).
+In the window the agent's `ticket-writer` step reads the raw suggestion and
+either writes the ticket (`docs/tickets/auto/<Ref>.md`, in the PR for you to
+check) or stops with a comment — `blocked` (needs an RFC) or `needs-info` (it
+asked you up to three questions). Nothing reaches staff without your Approve
+tick on the Automated Runs tab.
+
+Set `agent_auto_approve` to FALSE in Config to go back to the manual path
+below, where the issue waits for you to write the ticket and add `approved`.
+
+### Manual path (a hand-written ticket, or `agent_auto_approve` off)
 
 For each suggestion you want worked:
 
