@@ -48,7 +48,18 @@ const REPORTS  = 'Reports';
 const DIAG     = 'Diagnostics';
 
 const TZ = 'Asia/Kolkata';
-const BRAND = { blue: '#1e3a5f', gold: '#d4a853', lightGold: '#f7ecd4', line: '#dfe3e8' };
+//  Transcribed from Christwood/brand.json — the canonical palette, sampled
+//  from the official logo. Apps Script cannot read that file at runtime, so
+//  these are copies; if brand.json changes, change them here too.
+//    primary  #00458E  colors.primary      headers, titles, rules
+//    accent   #B12923  colors.accent       decorative only (6.54:1) — never text
+//    tint     #E8F0F9  colors.primaryTint  pale field BEHIND ink text
+//    line     #EEF1F3  colors.neutralTint  hairline table borders
+//  The previous navy/gold (#1e3a5f / #d4a853) were off-brand; brand.json's
+//  recolorMap maps both explicitly to the values below.
+//  `tint` is primaryTint, NOT accentTint: accentTint #FBE9E8 is the estate's
+//  ERROR fill, so a subheading wearing it would read as a warning.
+const BRAND = { primary: '#00458E', accent: '#B12923', tint: '#E8F0F9', line: '#EEF1F3' };
 
 //  Signature spaces at the foot of every PDF report, left to right.
 //  Add or remove entries and the row re-spaces itself.
@@ -552,13 +563,17 @@ function styleRow(sheet, row, source) {
 
 
 // ─────────────────────────────────────────────────────────────
-//  WEB APP ENTRY  — called by MacroDroid
+//  LEGACY SINGLE-CALL ENTRY  — MacroDroid's original payload
+//
+//  No longer the web-app entry point: doPost now lives in CallLog_Sync.js
+//  and dispatches here for a legacy {number, direction} body. Kept working
+//  verbatim so MacroDroid keeps logging while the capture app is proven.
+//  Delete this, and its branch in dispatchPost, once MacroDroid is retired.
 // ─────────────────────────────────────────────────────────────
-function doPost(e) {
+function handleLegacyPost(data) {
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(20000);
-    const data   = JSON.parse(e.postData.contents);
     const number = normaliseNumber(data.number || '');
     const typeMap = { INCOMING: 'Incoming', OUTGOING: 'Outgoing', MISSED: 'Missed' };
     const callType = typeMap[String(data.direction || '').toUpperCase()] || '';
@@ -702,6 +717,15 @@ function onOpen() {
     .addItem('Backfill & re-resolve all rows', 'backfill')
     .addItem('Diagnose (write report)',        'diagnose')
     .addItem('Cleanup phone numbers',          'cleanupNumbers')
+    .addSeparator()
+    .addSubMenu(ui.createMenu('🔑 Sync & security')
+      .addItem('Sync status',                  'syncStatus')
+      .addSeparator()
+      .addItem('Generate shared secret',       'generateSharedSecretUi')
+      .addItem('Enforce authentication',       'enforceAuthUi')
+      .addItem('Stop enforcing (rollback)',    'relaxAuthUi')
+      .addSeparator()
+      .addItem('Remove blank-phone rows',      'removeBlankPhoneRows'))
     .addSeparator()
     .addItem('Refresh dropdowns on all rows',  'applyAllDropdowns')
     .addItem('Re-read scratch tab (options)',  'reloadOptions')
@@ -888,7 +912,7 @@ function diagnose() {
   //  header over the top silently ate the first line of every report.
   d.getRange(2, 1, out.length, 2).setValues(out);
   d.getRange(1, 1, 1, 2).setValues([['Check', 'Result']])
-    .setBackground(BRAND.blue).setFontColor('#fff').setFontWeight('bold');
+    .setBackground(BRAND.primary).setFontColor('#fff').setFontWeight('bold');
   d.setColumnWidth(1, 380); d.setColumnWidth(2, 320); d.setFrozenRows(1);
   ss.setActiveSheet(d);
   SpreadsheetApp.getUi().alert('✅ Diagnostics written. Check the "' + DIAG + '" tab.');
@@ -921,7 +945,7 @@ function setupSheet() {
   let log = ss.getSheetByName(CALL_LOG) || ss.insertSheet(CALL_LOG);
   if (log.getLastRow() === 0) log.appendRow(DEFAULT_HEADERS);
   log.getRange(1, 1, 1, TOTAL_COLS)
-    .setBackground(BRAND.blue).setFontColor('#fff').setFontWeight('bold')
+    .setBackground(BRAND.primary).setFontColor('#fff').setFontWeight('bold')
     .setHorizontalAlignment('center');
   const widths = [140,165,120,120,160,160,80,80,200,260];
   widths.forEach((w, i) => log.setColumnWidth(i + 1, w));
@@ -1021,7 +1045,7 @@ function buildSummary(ss) {
   add('Calls in last 7 days',  `=COUNTIFS(${rL},">="&TODAY()-6,${rL},"<"&TODAY()+1)`);
   add('Last 14 days',
       `=IFERROR(SPARKLINE(ARRAYFORMULA(COUNTIFS(${rL},">="&SEQUENCE(1,14,TODAY()-13),` +
-      `${rL},"<"&SEQUENCE(1,14,TODAY()-13)+1)),{"charttype","column";"color","${BRAND.gold}"}),"")`);
+      `${rL},"<"&SEQUENCE(1,14,TODAY()-13)+1)),{"charttype","column";"color","${BRAND.accent}"}),"")`);
   blank();
 
   // ── Data quality ─────────────────────────────────────────
@@ -1109,7 +1133,7 @@ function buildSummary(ss) {
   const dateWhere = `"&" and ${c(COL_LOGGED)} >= datetime '"&TEXT(${PS},"yyyy-MM-dd HH:mm:ss")&` +
                     `"' and ${c(COL_LOGGED)} < datetime '"&TEXT(${PE}+1,"yyyy-MM-dd HH:mm:ss")&"'`;
   const panel = (col, title, formula) => {
-    sh.getRange(PANEL_ROW, col, 1, 2).setBackground(BRAND.blue);
+    sh.getRange(PANEL_ROW, col, 1, 2).setBackground(BRAND.primary);
     sh.getRange(PANEL_ROW, col).setValue(title).setFontWeight('bold').setFontColor('#fff');
     sh.getRange(PANEL_ROW + 1, col).setFormula(formula);
   };
@@ -1132,21 +1156,21 @@ function buildSummary(ss) {
     `count(${c(COL_PHONE)}) 'Calls'"),"No data yet")`);
 
   // ── Formatting ───────────────────────────────────────────
-  sh.getRange('A1').setFontSize(18).setFontWeight('bold').setFontColor(BRAND.blue);
-  sh.getRange('A2').setFontWeight('bold').setFontColor(BRAND.blue);
-  selCell.setBackground(BRAND.lightGold).setFontWeight('bold')
-    .setBorder(true, true, true, true, false, false, BRAND.blue, SpreadsheetApp.BorderStyle.SOLID);
+  sh.getRange('A1').setFontSize(18).setFontWeight('bold').setFontColor(BRAND.primary);
+  sh.getRange('A2').setFontWeight('bold').setFontColor(BRAND.primary);
+  selCell.setBackground(BRAND.tint).setFontWeight('bold')
+    .setBorder(true, true, true, true, false, false, BRAND.primary, SpreadsheetApp.BorderStyle.SOLID);
   sh.getRange('C2').setFontColor('#666').setFontSize(9);
   sh.getRange('A3').setFontSize(9).setFontColor('#666');
   secRows.forEach(r => {
     sh.getRange(r, 1, 1, 3).merge()
-      .setBackground(BRAND.blue).setFontColor('#fff').setFontWeight('bold')
+      .setBackground(BRAND.primary).setFontColor('#fff').setFontWeight('bold')
       .setVerticalAlignment('middle');
     sh.setRowHeight(r, 24);
   });
   subRows.forEach(r => sh.getRange(r, 1, 1, 3)
-    .setBackground(BRAND.lightGold).setFontWeight('bold')
-    .setBorder(null, null, true, null, null, null, BRAND.blue, SpreadsheetApp.BorderStyle.SOLID));
+    .setBackground(BRAND.tint).setFontWeight('bold')
+    .setBorder(null, null, true, null, null, null, BRAND.primary, SpreadsheetApp.BorderStyle.SOLID));
   warnRows.forEach(r => sh.getRange(r, 1).setFontColor('#b00020'));
 
   sh.getRange(1, 2, rows.length, 1).setNumberFormat('#,##0').setHorizontalAlignment('right');
@@ -1235,7 +1259,7 @@ function insertSummaryCharts(sh, srcStart, srcEnd, typStart, typEnd, pos) {
   sh.insertChart(sh.newChart().asColumnChart()
     .addRange(sh.getRange(typStart, 1, typEnd - typStart + 1, 2))
     .setNumHeaders(0).setOption('title', 'How they called').setOption('legend', 'none')
-    .setOption('colors', [BRAND.gold]).setOption('width', 380).setOption('height', 240)
+    .setOption('colors', [BRAND.accent]).setOption('width', 380).setOption('height', 240)
     .setPosition(b.row, b.col, b.ox, b.oy).build());
 }
 
@@ -1262,12 +1286,12 @@ function buildReportsTab(ss) {
 
   sh.clear();
   sh.getRange('A1').setValue('📄 Call Log — PDF Reports')
-    .setFontSize(18).setFontWeight('bold').setFontColor(BRAND.blue);
+    .setFontSize(18).setFontWeight('bold').setFontColor(BRAND.primary);
   sh.getRange('A3').setValue('From date');
   sh.getRange('A4').setValue('To date');
   sh.getRange('B3:B4').setNumberFormat('yyyy-mm-dd')
-    .setBackground(BRAND.lightGold).setFontWeight('bold')
-    .setBorder(true, true, true, true, false, false, BRAND.blue, SpreadsheetApp.BorderStyle.SOLID);
+    .setBackground(BRAND.tint).setFontWeight('bold')
+    .setBorder(true, true, true, true, false, false, BRAND.primary, SpreadsheetApp.BorderStyle.SOLID);
   sh.getRange('B3:B4').setDataValidation(
     SpreadsheetApp.newDataValidation().requireDate().setAllowInvalid(false).build());
   sh.getRange('A6').setValue(
@@ -1277,7 +1301,7 @@ function buildReportsTab(ss) {
 
   const head = ['#','From','To','Calls','Generated At','Generated By','PDF'];
   sh.getRange(REP_HEAD_ROW, 1, 1, head.length).setValues([head])
-    .setBackground(BRAND.blue).setFontColor('#fff').setFontWeight('bold');
+    .setBackground(BRAND.primary).setFontColor('#fff').setFontWeight('bold');
   if (existing.length) {
     sh.getRange(REP_FIRST_ROW, 1, existing.length, 7).setValues(existing);
   }
@@ -1470,21 +1494,21 @@ function buildReportHtml(agg, from, to) {
   '<style>' +
   '@page{size:A4 landscape;margin:12mm 10mm}' +
   'body{font-family:Helvetica,Arial,sans-serif;color:#222;font-size:10pt;margin:0}' +
-  'h1{color:' + BRAND.blue + ';font-size:19pt;margin:0}' +
+  'h1{color:' + BRAND.primary + ';font-size:19pt;margin:0}' +
   '.sub{color:#666;font-size:9pt;margin:2mm 0 6mm}' +
-  '.rule{height:3px;background:' + BRAND.gold + ';margin:0 0 5mm}' +
-  'h2{color:' + BRAND.blue + ';font-size:12pt;margin:7mm 0 2mm;' +
+  '.rule{height:3px;background:' + BRAND.accent + ';margin:0 0 5mm}' +
+  'h2{color:' + BRAND.primary + ';font-size:12pt;margin:7mm 0 2mm;' +
      'border-bottom:1px solid ' + BRAND.line + ';padding-bottom:1mm}' +
   'table{width:100%;border-collapse:collapse;font-size:9.5pt}' +
   'th,td{padding:2.2mm 2.5mm;border-bottom:1px solid ' + BRAND.line + ';text-align:left}' +
-  'thead th{background:' + BRAND.blue + ';color:#fff;font-size:9pt}' +
+  'thead th{background:' + BRAND.primary + ';color:#fff;font-size:9pt}' +
   'td.n,th.n{text-align:right;white-space:nowrap}' +
-  'tfoot td{font-weight:bold;background:' + BRAND.lightGold + '}' +
+  'tfoot td{font-weight:bold;background:' + BRAND.tint + '}' +
   'tr.muted td{color:#999;font-style:italic}' +
   '.kpis{display:table;width:100%;table-layout:fixed;border-spacing:2mm 0}' +
-  '.kpi{display:table-cell;background:' + BRAND.lightGold + ';border-left:3px solid ' +
-       BRAND.gold + ';padding:3mm;text-align:center}' +
-  '.kv{font-size:16pt;font-weight:bold;color:' + BRAND.blue + '}' +
+  '.kpi{display:table-cell;background:' + BRAND.tint + ';border-left:3px solid ' +
+       BRAND.accent + ';padding:3mm;text-align:center}' +
+  '.kv{font-size:16pt;font-weight:bold;color:' + BRAND.primary + '}' +
   '.kl{font-size:7.5pt;color:#555;text-transform:uppercase;letter-spacing:.4pt}' +
   '.warn{background:#fff4e5;border-left:3px solid #d98800;padding:3mm;font-size:9pt;margin:5mm 0}' +
   //  Landscape is wide: run the breakdown tables two abreast rather than
@@ -1509,7 +1533,7 @@ function buildReportHtml(agg, from, to) {
   '.sig .cap{font-size:8pt;color:#666;text-transform:uppercase;letter-spacing:.4pt;' +
              'padding-bottom:16mm}' +
   '.sig .ln{border-top:1px solid #333;padding-top:1.5mm;font-weight:bold;' +
-            'color:' + BRAND.blue + ';font-size:10pt}' +
+            'color:' + BRAND.primary + ';font-size:10pt}' +
   '.foot{margin-top:6mm;border-top:1px solid ' + BRAND.line +
         ';padding-top:2mm;color:#888;font-size:8pt}' +
   '</style>' +
