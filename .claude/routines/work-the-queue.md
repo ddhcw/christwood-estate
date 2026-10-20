@@ -188,7 +188,7 @@ PR body, in this order:
    Never imply otherwise.
 5. **Standards applied** — which files in `standards/` you actually read.
 
-Then on the issue: comment with the PR link (ending with a `pr_opened` marker),
+Then on the issue: comment with the PR link (ending with a `pr_linked` marker),
 remove `approved`, add `awaiting-review`.
 
 ## Step 6 — release and loop or stop
@@ -208,7 +208,7 @@ A `verdict` marker also carries a `"verdict"` field:
 
 `<!-- pipeline-event {"type":"verdict","verdict":"READY","ref":"…","run":"…","at":"ISO"} -->`
 
-- `type` is one of: `run_claimed`, `verdict`, `ticket_written`, `pr_opened`,
+- `type` is one of: `run_claimed`, `verdict`, `ticket_written`, `pr_opened`, `pr_linked`,
   `draft_pr`, `run_failed`.
 - `verdict` values: `READY`, `NEEDS-RFC`, `NEEDS-INFO` (ticket-writer outcomes),
   `EXISTING-TICKET` (hand-written ticket, ticket-writer not run),
@@ -231,7 +231,7 @@ Which comment gets which marker (no comment is left without one):
 | RFC not Accepted comment | `verdict` | `BLOCKED-RFC` |
 | Investigate-only findings comment | `verdict` | `INVESTIGATE` |
 | PR body (normal PR) | `pr_opened` | none |
-| PR-link comment on the issue | `pr_opened` | none |
+| PR-link comment on the issue | `pr_linked` | none |
 | PR body (draft PR) and its link comment on the issue | `draft_pr` | none |
 | Failure comment | `run_failed` | none |
 
