@@ -12,6 +12,7 @@ and maintenance records, with admin-level access.
 |---|---|
 | Script ID | `1PheLLKl1u_ONZROMQsgTg9P3y7nziXt-0cinIG3xBnMJ8yCqcSLb5okG` |
 | Spreadsheet | `1RATX-5OGVEvfEXd1xzsJOtFDpGxkU_2Xg7wOPcaCF8k` |
+| Runs as | `automations@christwood.edu.in` — deploying from any other account switches who the app runs as (RFC-0004) |
 | Web app | see the Projects Tracker row for the current `/exec` URL |
 
 ## Source of truth
@@ -37,6 +38,11 @@ confirmed identical to the local working copy. Per shipping standards §2:
 
 ## Footguns
 
+- **Runs as `automations@christwood.edu.in` (RFC-0004).** The web app is
+  `executeAs: USER_DEPLOYING`: deploying from any other account switches who
+  the app runs as. Only automations@ may update the live deployment, by
+  editing it in place (Manage deployments → edit → New version) so the link
+  never changes. The tracker's deploy job refuses to deploy otherwise.
 - Fuel, trip, attendance and maintenance entries are all separate sheets with
   their own shapes. A change described as applying to "all entered data" must
   name the sheets it touches — do not assume one shared schema.
