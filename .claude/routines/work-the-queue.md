@@ -38,19 +38,28 @@ All times are in the file's `timezone` (`Asia/Kolkata`, UTC+05:30). Convert the
 current UTC time into that zone first, then ask: is now at or after a window's
 most recent `start` and before the `end` that follows it? Start is inclusive,
 end is exclusive. Windows cross midnight, so do not compare day names alone.
-Worked example for Thursday 20:00 → Saturday 08:00:
+The windows are open from Tuesday 20:00 through Thursday 07:59 (`tue-thu`) and
+from Thursday 20:00 through Saturday 07:59 (`thu-sat`). Closed Thursday
+08:00–19:59 and at every other time.
 
+Worked example for Tuesday 20:00 → Thursday 08:00 (`tue-thu`):
+
+- Tuesday 19:59 IST → outside
+- Tuesday 20:00 IST → inside
+- Midday between the two ends of the window (the day before Thursday) → inside
+- Thursday 03:00 IST (still the previous day in UTC) → inside
+- Thursday 07:59 IST → inside
+- Thursday 08:00 IST → outside
+- Thursday 19:59 IST → outside
+
+Worked example for Thursday 20:00 → Saturday 08:00 (`thu-sat`):
+
+- Thursday 20:00 IST → inside
 - Friday 02:00 IST → inside
 - Saturday 07:59 IST → inside
+- Saturday 08:00 IST → outside
 - Saturday 08:01 IST → outside
-- Thursday 19:59 IST → outside
 - Monday any time → outside
-
-Worked example for Tuesday 20:00 → Wednesday 08:00:
-
-- Wednesday 03:00 IST (still Tuesday in UTC) → inside
-- Wednesday 08:00 IST → outside
-- Wednesday 20:53 IST → outside
 
 ## Step 2 — pick tickets
 
@@ -87,7 +96,7 @@ is skipped:
 4. Investigate-only finished (Step 3b).
 5. Draft PR because the reviewer still reports a violation (Step 4).
 6. PR opened normally (Step 5).
-7. Any failure (see "If something goes wrong").
+7. Any failure, including a failure before any other verdict (`FAILED`) (see "If something goes wrong").
 8. Any other stop you decide on after claiming.
 
 If you are unsure whether you removed it, remove it again (removing a label
@@ -99,8 +108,12 @@ if the key is missing). Do not start another ticket if ANY of these hold:
 1. Elapsed time since the run started exceeds `run_time_budget_minutes`.
 2. The window closes within 60 minutes. Test it: run `node tools/window-check.js
    --now <time 60 minutes from now, ISO with +05:30 offset>`; if it prints
-   CLOSED (or exits non-zero), the window closes within 60 minutes. (Without
-   `node`, compute it by hand from the window end.)
+   CLOSED (or exits non-zero), the window closes within 60 minutes. Example: at
+   Thursday 07:15 IST, pass `--now` the ISO time for 08:15 that
+   Thursday (real date, offset `+05:30`); it prints CLOSED, so do not start
+   another ticket. The same holds at Saturday 07:15 IST (08:15 is closed). At
+   Thursday 06:30 IST, 07:30 is still open, so another ticket is allowed.
+   (Without `node`, compute it by hand from the window end.)
 3. The previous ticket in this run failed or produced a draft PR.
 4. The per-window cap above would be reached.
 
@@ -212,9 +225,12 @@ A `verdict` marker also carries a `"verdict"` field:
   `draft_pr`, `run_failed`.
 - `verdict` values: `READY`, `NEEDS-RFC`, `NEEDS-INFO` (ticket-writer outcomes),
   `EXISTING-TICKET` (hand-written ticket, ticket-writer not run),
-  `INVESTIGATE` (investigate-only), `BLOCKED-RFC` (RFC not Accepted).
+  `INVESTIGATE` (investigate-only), `BLOCKED-RFC` (RFC not Accepted),
+  `FAILED` (claimed, then failed before any other verdict was posted).
 - A `verdict` marker is posted for EVERY ticket the run starts, exactly once.
-  The per-window cap in Step 2 counts these.
+  The per-window cap in Step 2 counts these. A ticket that fails after already
+  getting a verdict (for example READY, then the implementer crashes) does not
+  get a second one; only a ticket that fails before any verdict gets `FAILED`.
 - `ref` is the Ref (S-XXXXXXXX). `at` is the current time as ISO with offset.
 - `run` is the session link. If you cannot read it, write `"unknown"`.
 
@@ -233,12 +249,16 @@ Which comment gets which marker (no comment is left without one):
 | PR body (normal PR) | `pr_opened` | none |
 | PR-link comment on the issue | `pr_linked` | none |
 | PR body (draft PR) and its link comment on the issue | `draft_pr` | none |
-| Failure comment | `run_failed` | none |
+| Failure comment, ticket has no verdict yet | `verdict` AND `run_failed` (two marker lines, `verdict` first) | `FAILED` |
+| Failure comment, ticket already has a verdict | `run_failed` | none |
 
 ## If something goes wrong
 
-Comment on the issue with what failed and why (ending with a `run_failed`
-marker), remove `agent-working` and `approved` so you do not retry the same
+Comment on the issue with what failed and why. If this ticket has not yet had
+a `verdict` marker, end the comment with a `verdict` marker
+(`"verdict":"FAILED"`) followed by a `run_failed` marker, so the window cap
+counts the ticket (this is the one comment allowed two marker lines). If it
+already has a verdict, end with the `run_failed` marker only. Then remove `agent-working` and `approved` so you do not retry the same
 broken thing every hour, and stop. Removing `agent-working` is the last action
 (the Release rule). Do not start another ticket. A failed run that says
 so plainly is fine. A failed run that pretends to have succeeded is not.

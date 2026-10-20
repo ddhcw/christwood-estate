@@ -2,18 +2,20 @@
 
 The agent works in two windows a week. The windows live in
 `.claude/agent-window.json` (`windows` list) and are the only source of truth;
-the times below are examples. At the time of writing: Tuesday 20:00 → Wednesday
-08:00 IST (`tue-night`) and Thursday 20:00 → Saturday 08:00 IST (`thu-sat`).
-Each run takes up to two tickets, and each window has a ticket cap
-(`max_tickets`). You review the morning each window closes. This is that routine.
+the times below are examples. At the time of writing: Tuesday 20:00 → Thursday
+08:00 IST (`tue-thu`, max 8 tickets) and Thursday 20:00 → Saturday 08:00 IST
+(`thu-sat`, max 10 tickets). Each run takes up to two tickets, and each window
+has a ticket cap (`max_tickets`). You review the morning each window closes.
+This is that routine.
 
-| Window ends | You review | Its PRs deploy on |
+| Window | You review | Its PRs deploy on |
 |---|---|---|
-| Wednesday morning | Wednesday | Thursday |
-| Saturday morning | Saturday | Tuesday |
+| Tue 20:00 → Thu 08:00 (`tue-thu`) | Thursday morning | Thursday 09:00–17:00 |
+| Thu 20:00 → Sat 08:00 (`thu-sat`) | Saturday morning | Tuesday 09:00–17:00 |
 
-Deploys run Tuesday and Thursday 09:00–17:00 only: a PR approved after Wednesday's
-review goes live Thursday; one approved after Saturday's review goes live Tuesday.
+Deploys run Tuesday and Thursday 09:00–17:00 only: a PR approved at Thursday
+morning's review goes live that Thursday; one approved at Saturday morning's
+review goes live the following Tuesday.
 
 ---
 
@@ -55,7 +57,7 @@ right call more often than it feels like it should be.
 
 ---
 
-## Review mornings (Wednesday and Saturday)
+## Review mornings (Thursday and Saturday)
 
 ```bash
 cd ~/Public/PROJECTS/Christwood/christwood-estate
