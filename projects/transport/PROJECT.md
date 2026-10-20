@@ -59,3 +59,17 @@ confirmed identical to the local working copy. Per shipping standards §2:
   `Attendance.js`, `AttendanceForm.html`, roster views in `Script.html`) are a
   separate, unrelated lookup and were untouched — do not conflate the two if a
   future ticket asks about "route numbers" again.
+
+## Other files in this folder
+
+None of these are pushed to Apps Script (see `.claspignore`).
+
+| Path | What it is |
+|---|---|
+| `docs/SETUP-GUIDE.md` | Setup guide for the current version (sheet setup, deployment, admin PIN). |
+| `docs/fleet-data-project-note.md` | Original Phase 1 scoping note (from the transport-in-charge's list, June 2026). |
+| `docs/expansion/` | Phase 2 plan: parent-facing live tracking. Plan, leadership one-pager, `make-pdf.sh`. |
+| `reference/` | Office source material: fuel process PDFs. The attendance CSV is student/driver data and is gitignored. Don't commit it. |
+| `archive/src-2026-07-30/` | Code snapshot from 30 July, before attendance and the fuel report were added. Read-only. |
+
+Merged here 2026-10-08 from the old local `Christwood/transport*` folders.

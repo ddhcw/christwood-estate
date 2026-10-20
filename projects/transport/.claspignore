@@ -2,3 +2,6 @@
 !*.js
 !*.html
 !appsscript.json
+docs/**
+reference/**
+archive/**
