@@ -73,8 +73,25 @@ Skip any that already carry `agent-working`.
 
 **Claim before work.** The FIRST thing you do with the issue, before reading
 anything about it: add the label `agent-working` and post a comment with the
-marker `run_claimed`. Remove `agent-working` when the run ends, whether it
-succeeded, stopped or failed. Never leave it behind.
+marker `run_claimed`. Never leave `agent-working` behind:
+
+**Release rule.** EVERY exit after a claim removes `agent-working` from that
+issue as the LAST action, after the final comment, label change and marker is
+done. This covers success and every stop and failure. The stop paths, so none
+is skipped:
+
+1. NEEDS-RFC (Step 2b).
+2. NEEDS-INFO (Step 2b), including the outside-the-repo redirect to Step 3b if
+   that path then stops.
+3. RFC status is not `Accepted` (Step 3).
+4. Investigate-only finished (Step 3b).
+5. Draft PR because the reviewer still reports a violation (Step 4).
+6. PR opened normally (Step 5).
+7. Any failure (see "If something goes wrong").
+8. Any other stop you decide on after claiming.
+
+If you are unsure whether you removed it, remove it again (removing a label
+that is not there is harmless).
 
 **How many tickets.** At most `max_tickets_per_run` tickets per run (default 1
 if the key is missing). Do not start another ticket if ANY of these hold:
@@ -92,20 +109,25 @@ When another ticket is allowed, repeat Step 2 onward (claim, then work) for it.
 ## Step 2b — no ticket yet? Decide first, build second
 
 Look for the issue's ticket: a `docs/tickets/TICKET-*.md` that names its Ref, or
-`docs/tickets/auto/<Ref>.md`. If one exists, go to Step 3.
+`docs/tickets/auto/<Ref>.md`. If one exists, post a `verdict` marker comment with `"verdict":"EXISTING-TICKET"`
+(see Markers), then go to Step 3.
 
 If none exists — the normal case for work queued from the Sheet — run the
 `ticket-writer` subagent with the issue text and the project's `PROJECT.md`. It
 returns exactly one verdict:
 
-- **READY** — it wrote `docs/tickets/auto/<Ref>.md`. Go to Step 3 and treat that
-  file as the ticket. It is committed on the branch, so it appears in the PR.
+- **READY** — it wrote `docs/tickets/auto/<Ref>.md`. Post a `ticket_written`
+  marker comment and a `verdict` marker comment (`"verdict":"READY"`). Go to
+  Step 3 and treat that file as the ticket. It is committed on the branch, so
+  it appears in the PR.
 - **NEEDS-RFC** — comment on the issue with the threshold it hit and the open
-  questions, remove `approved`, add `blocked`. Stop. No branch, no PR. Never
-  write or accept an RFC yourself.
+  questions, ending with a `verdict` marker (`"verdict":"NEEDS-RFC"`). Remove
+  `approved`, add `blocked`. Stop (apply the Release rule). No branch, no PR.
+  Never write or accept an RFC yourself.
 - **NEEDS-INFO** — comment on the issue with its questions (at most three),
-  remove `approved`, add `needs-info`. Stop. No branch, no PR. If it says the
-  cause is outside the repo, follow Step 3b instead.
+  ending with a `verdict` marker (`"verdict":"NEEDS-INFO"`). Remove `approved`,
+  add `needs-info`. Stop (apply the Release rule). No branch, no PR. If it says
+  the cause is outside the repo, follow Step 3b instead.
 
 Never override the subagent's refusal to get a ticket built.
 
@@ -116,8 +138,9 @@ In this order:
 2. The ticket (hand-written `docs/tickets/TICKET-NNNN.md`, or the one from
    Step 2b).
 3. The RFC it references, if any. **If the RFC's status is not `Accepted`,
-   stop** and comment on the issue saying so. Do not implement an unaccepted
-   RFC. (Auto-written tickets reference no RFC: one that needed it was already
+   stop** and comment on the issue saying so, ending with a `verdict` marker
+   (`"verdict":"BLOCKED-RFC"`), then apply the Release rule. Do not implement
+   an unaccepted RFC. (Auto-written tickets reference no RFC: one that needed it was already
    refused in Step 2b.)
 4. `projects/<slug>/PROJECT.md` — bindings and footguns.
 5. `standards/category-router.md` → the matching category file.
@@ -127,8 +150,9 @@ In this order:
 If the ticket is marked **Investigate only**, do not change code. Read, work out
 what is actually happening, and post your findings as a comment on the issue:
 what you checked, what you can rule out, what you cannot determine from here,
-and what a human would need to check next. Then remove `approved`, add
-`awaiting-review`, and stop. No branch, no PR.
+and what a human would need to check next. End that comment with a `verdict`
+marker (`"verdict":"INVESTIGATE"`). Then remove `approved`, add
+`awaiting-review`, apply the Release rule, and stop. No branch, no PR.
 
 Saying "I could not determine this from the sandbox" is the correct answer when
 it is true. Do not manufacture a fix to look productive.
@@ -164,12 +188,12 @@ PR body, in this order:
    Never imply otherwise.
 5. **Standards applied** — which files in `standards/` you actually read.
 
-Then on the issue: comment with the PR link, remove `approved`, add
-`awaiting-review`.
+Then on the issue: comment with the PR link (ending with a `pr_opened` marker),
+remove `approved`, add `awaiting-review`.
 
 ## Step 6 — release and loop or stop
 
-Remove `agent-working` from the issue. Then go back to Step 2 only if the brakes
+Remove `agent-working` from the issue (the Release rule). Then go back to Step 2 only if the brakes
 allow another ticket; otherwise stop. Do not tidy the repo. Do not start
 anything nobody asked for.
 
@@ -180,17 +204,41 @@ final line:
 
 `<!-- pipeline-event {"type":"…","ref":"…","run":"…","at":"ISO"} -->`
 
+A `verdict` marker also carries a `"verdict"` field:
+
+`<!-- pipeline-event {"type":"verdict","verdict":"READY","ref":"…","run":"…","at":"ISO"} -->`
+
 - `type` is one of: `run_claimed`, `verdict`, `ticket_written`, `pr_opened`,
   `draft_pr`, `run_failed`.
-- `verdict` goes on the comment that records the ticket-writer's READY /
-  NEEDS-RFC / NEEDS-INFO outcome. Post one for every ticket you take, so the
-  window cap can count them.
+- `verdict` values: `READY`, `NEEDS-RFC`, `NEEDS-INFO` (ticket-writer outcomes),
+  `EXISTING-TICKET` (hand-written ticket, ticket-writer not run),
+  `INVESTIGATE` (investigate-only), `BLOCKED-RFC` (RFC not Accepted).
+- A `verdict` marker is posted for EVERY ticket the run starts, exactly once.
+  The per-window cap in Step 2 counts these.
 - `ref` is the Ref (S-XXXXXXXX). `at` is the current time as ISO with offset.
 - `run` is the session link. If you cannot read it, write `"unknown"`.
+
+Which comment gets which marker (no comment is left without one):
+
+| Comment | Marker type | `verdict` field |
+|---|---|---|
+| Claim comment (first thing after claiming) | `run_claimed` | none |
+| Hand-written ticket found | `verdict` | `EXISTING-TICKET` |
+| ticket-writer READY: comment that the ticket was written | `ticket_written` | none |
+| ticket-writer READY: verdict comment | `verdict` | `READY` |
+| NEEDS-RFC refusal comment | `verdict` | `NEEDS-RFC` |
+| NEEDS-INFO questions comment | `verdict` | `NEEDS-INFO` |
+| RFC not Accepted comment | `verdict` | `BLOCKED-RFC` |
+| Investigate-only findings comment | `verdict` | `INVESTIGATE` |
+| PR body (normal PR) | `pr_opened` | none |
+| PR-link comment on the issue | `pr_opened` | none |
+| PR body (draft PR) and its link comment on the issue | `draft_pr` | none |
+| Failure comment | `run_failed` | none |
 
 ## If something goes wrong
 
 Comment on the issue with what failed and why (ending with a `run_failed`
 marker), remove `agent-working` and `approved` so you do not retry the same
-broken thing every hour, and stop. Do not start another ticket. A failed run that says
+broken thing every hour, and stop. Removing `agent-working` is the last action
+(the Release rule). Do not start another ticket. A failed run that says
 so plainly is fine. A failed run that pretends to have succeeded is not.

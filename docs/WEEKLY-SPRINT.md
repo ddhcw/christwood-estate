@@ -17,7 +17,7 @@ review goes live Thursday; one approved after Saturday's review goes live Tuesda
 
 ---
 
-## Before Thursday evening — queue the work
+## Before a window opens — queue the work
 
 **Normal path — nothing to do but queue it.** In the tracker, set a row's
 Status to "Queued for agent" and Assignee to "Claude". The next hourly sync
@@ -135,12 +135,11 @@ And update the tracker row to `Done`.
 | To do this | Do this |
 |---|---|
 | Stop everything now | `.claude/agent-window.json`: `agent_enabled: false` |
-| Pause the agent without a code change | Add the GitHub label `agent-paused` to any open issue (or set Config `agent_paused` in the tracker, which maintains that issue). The routine stops with "paused" |
+| Pause the agent without a code change | Add the GitHub label `agent-paused` to any open issue (create the label if it is missing). The routine stops with "paused" while one is open. A tracker Config row `agent_paused` that would automate this is planned and not yet built |
 | Run outside the windows once | `override_until: "2026-09-22T18:00:00+05:30"` — one-off; an expired value is ignored and never blocks later windows |
 | Change a window or its cap | `windows[].start` / `.end` / `.max_tickets` |
 | Change tickets per run or run length | `max_tickets_per_run`, `run_time_budget_minutes` |
-| Stop deploying approved PRs | Config `agent_deploy_enabled` FALSE in the tracker |
-| Stop queuing new issues | Config `agent_enabled` FALSE in the tracker |
+| Stop deploying approved PRs | Set the `agent_deploy_enabled` row to FALSE on the Config tab of the Projects Tracker. This stops deployments; the routine does not read it |
 | Stop one ticket | Remove its `approved` label |
 
 All of it takes effect on the next hourly run. The routine checks the window
