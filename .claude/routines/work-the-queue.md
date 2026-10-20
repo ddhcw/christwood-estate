@@ -47,13 +47,36 @@ List open issues with BOTH labels `claude-task` and `approved`.
 - Otherwise take the **oldest one only**. One ticket per run, always, regardless
   of how small they look.
 
+## Step 2b — no ticket yet? Decide first, build second
+
+Look for the issue's ticket: a `docs/tickets/TICKET-*.md` that names its Ref, or
+`docs/tickets/auto/<Ref>.md`. If one exists, go to Step 3.
+
+If none exists — the normal case for work queued from the Sheet — run the
+`ticket-writer` subagent with the issue text and the project's `PROJECT.md`. It
+returns exactly one verdict:
+
+- **READY** — it wrote `docs/tickets/auto/<Ref>.md`. Go to Step 3 and treat that
+  file as the ticket. It is committed on the branch, so it appears in the PR.
+- **NEEDS-RFC** — comment on the issue with the threshold it hit and the open
+  questions, remove `approved`, add `blocked`. Stop. No branch, no PR. Never
+  write or accept an RFC yourself.
+- **NEEDS-INFO** — comment on the issue with its questions (at most three),
+  remove `approved`, add `needs-info`. Stop. No branch, no PR. If it says the
+  cause is outside the repo, follow Step 3b instead.
+
+Never override the subagent's refusal to get a ticket built.
+
 ## Step 3 — read the context
 
 In this order:
 1. `CLAUDE.md` at the repo root — the hard rules bind you.
-2. The `docs/tickets/TICKET-NNNN.md` the issue names.
-3. The RFC it references. **If the RFC's status is not `Accepted`, stop** and
-   comment on the issue saying so. Do not implement an unaccepted RFC.
+2. The ticket (hand-written `docs/tickets/TICKET-NNNN.md`, or the one from
+   Step 2b).
+3. The RFC it references, if any. **If the RFC's status is not `Accepted`,
+   stop** and comment on the issue saying so. Do not implement an unaccepted
+   RFC. (Auto-written tickets reference no RFC: one that needed it was already
+   refused in Step 2b.)
 4. `projects/<slug>/PROJECT.md` — bindings and footguns.
 5. `standards/category-router.md` → the matching category file.
 
@@ -85,6 +108,9 @@ Branch `agent/S-XXXXXXXX`. Never commit to `main` — the ruleset will reject it
 anyway, and trying is a bug in your behaviour, not in the ruleset.
 
 PR body, in this order:
+0. If the ticket came from Step 2b, open with: "The ticket in
+   `docs/tickets/auto/` was written by the agent from the raw suggestion. Check
+   its acceptance criteria say what you meant before anything else."
 1. **What changed** — two or three sentences, plain.
 2. **Acceptance criteria** — the ticket's list, each marked met or not met. If
    one is not met, say so. Do not quietly drop it.
