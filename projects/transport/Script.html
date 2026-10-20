@@ -885,6 +885,27 @@
     }
     h += '</div>';
 
+    h += '<div class="card"><h2>⛽ Possible duplicate fuel entries</h2>';
+    if(!d.duplicateFuel || !d.duplicateFuel.length){
+      h += '<div class="empty">✅ No duplicate fuel entries found</div>';
+    } else {
+      h += '<p class="muted" style="margin-top:0">Same vehicle, same date, same amount. Nothing is changed '+
+           'automatically — check each cluster and fix or void the extra row from Fix Entries.</p>';
+      d.duplicateFuel.forEach(function(g){
+        h += '<div class="dupgroup"><div class="dupgroup-head">⚠️ '+esc(g.reg_no)+' · '+esc(g.date)+' · '+
+             CUR+g.amount+' · '+g.count+' entries</div>';
+        g.entries.forEach(function(e){
+          h += '<div class="dupgroup-row">'+
+               '<span>'+esc(e.product)+(e.litres!=null? ' · '+e.litres+' L':'')+'</span>'+
+               '<span>'+(e.bill_no? 'Bill '+esc(e.bill_no):'no bill no.')+'</span>'+
+               '<span>'+(e.odometer!=null? e.odometer+' km':'—')+'</span>'+
+               '<span class="muted">'+esc(e.entered_by||'—')+'</span></div>';
+        });
+        h += '</div>';
+      });
+    }
+    h += '</div>';
+
     h += '<div class="card"><h2>📊 Cost per km (latest month)</h2>';
     var measured = (d.perVehicle||[]).filter(function(v){ return !v.unmeasured; });
     var blind    = (d.perVehicle||[]).filter(function(v){ return v.unmeasured; });

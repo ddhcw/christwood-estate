@@ -65,7 +65,15 @@ Suggestions tab
 
 ## 6. Repository
 
-Single private monorepo, **Christwood only**: `christwood-estate`.
+Single monorepo, **Christwood only**, for projects that had no repo of their
+own: `christwood-estate`. Projects that already had a repository keep it — the
+estate convention is `ddhcw/christwood-<project>`. See `CLAUDE.md`.
+
+⚠️ This section originally said "nothing is published" and recommended a
+monorepo on that basis. That was wrong: `christwood-projects-tracker` and
+`christwood-oasis` already existed. The monorepo still earns its place for the
+three projects that genuinely had nothing, but it was chosen on a false premise
+and should not be extended to projects that already have a home.
 
 ```
 CLAUDE.md                  house style, loaded by every cloud session

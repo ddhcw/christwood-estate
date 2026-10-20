@@ -133,21 +133,32 @@ function submitRequest(formData) {
 
     SpreadsheetApp.flush();
 
-    // ── Send notification ──
+    // ── Send notifications ──
+    // Each notification is isolated in its own try/catch so a failure in
+    // one (e.g. MailApp.sendEmail throwing for the submission notice)
+    // cannot suppress the other (the Admin Head / CEO approval notice).
+    var notificationData = {
+      requestId: requestId,
+      staffName: userInfo.name,
+      staffEmail: email,
+      department: userInfo.department,
+      purpose: formData.purpose,
+      items: items,
+      totalCost: totalCost,
+      submittedDate: submittedDate,
+      attachmentCount: attachmentUrls.length
+    };
+
     try {
-      sendSubmissionNotification({
-        requestId: requestId,
-        staffName: userInfo.name,
-        staffEmail: email,
-        department: userInfo.department,
-        purpose: formData.purpose,
-        items: items,
-        totalCost: totalCost,
-        submittedDate: submittedDate,
-        attachmentCount: attachmentUrls.length
-      });
-    } catch (notifError) {
-      Logger.log('Notification failed (request still saved): ' + notifError.message);
+      sendSubmissionNotification(notificationData);
+    } catch (submissionNotifError) {
+      Logger.log('Submission notification failed (request still saved): ' + submissionNotifError.message);
+    }
+
+    try {
+      sendApprovalNotification(notificationData);
+    } catch (approvalNotifError) {
+      Logger.log('Approval notification failed (request still saved): ' + approvalNotifError.message);
     }
 
     return {

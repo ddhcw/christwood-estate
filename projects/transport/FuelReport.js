@@ -50,10 +50,9 @@ function odoBrokenOn_(vehicleId, date) {
  */
 function fuelReportRows_(fromDate, toDate) {
   const from = startOfDay_(fromDate), to = startOfDay_(toDate);
-  const regOf = {}, routeOf = {};
+  const regOf = {};
   getRows_(SHEETS.VEHICLES).forEach(function (v) {
     regOf[v.vehicle_id] = v.reg_no || v.vehicle_id;
-    routeOf[v.vehicle_id] = v.route_no || '';
   });
   const nameOf = {};
   getRows_(SHEETS.DRIVERS).forEach(function (d) { nameOf[d.driver_id] = d.name || ''; });
@@ -122,7 +121,6 @@ function fuelReportRows_(fromDate, toDate) {
 
     return {
       sno: i + 1,
-      route_no: routeOf[r.vehicle_id] || '',
       // A consumable prints its product name where a registration would go,
       // exactly as the office writes "AdBlue" on the voucher.
       vehicle_reg: propellant ? (regOf[r.vehicle_id] || r.vehicle_id) : String(r.product || 'Other'),
@@ -186,7 +184,7 @@ function previewFuelReport(token, fromStr, toStr) {
 // The PDF
 // ---------------------------------------------------------------------------
 
-const RPT_HEADERS = ['S. No', 'Route No', 'Vehicle Reg', 'Bill No', 'Date of Fuel', 'Qty', 'Amount',
+const RPT_HEADERS = ['S. No', 'Vehicle Reg', 'Bill No', 'Date of Fuel', 'Qty', 'Amount',
                      'Driver Name', 'Previous Kms', 'Filling Kms', 'FILLING STATION',
                      'Total Kms', 'Avg Kms'];
 
@@ -252,7 +250,7 @@ function generateFuelReport(token, fromStr, toStr) {
     pages.forEach(function (page, pi) {
       const chunk = rows.slice(page.from, page.to);
       const data = [RPT_HEADERS].concat(chunk.map(function (r) {
-        return [String(r.sno), r.route_no, r.vehicle_reg, r.bill_no, r.date,
+        return [String(r.sno), r.vehicle_reg, r.bill_no, r.date,
                 r.qty === '' ? '' : String(r.qty), String(money(r.amount)), r.driver_name,
                 String(r.previous_kms), String(r.filling_kms), r.station,
                 String(r.total_kms), r.avg_kms.toFixed(2)];
@@ -260,7 +258,7 @@ function generateFuelReport(token, fromStr, toStr) {
       // The Total belongs to the last page's table, so it can never be orphaned
       // from the rows it totals. Summed at full precision and rounded once.
       if (pi === pages.length - 1) {
-        data.push(['', '', '', 'Total', '', '', sym + Math.round(total).toLocaleString('en-IN'),
+        data.push(['', '', 'Total', '', '', sym + Math.round(total).toLocaleString('en-IN'),
                    '', '', '', '', '', '']);
       }
       const table = body.appendTable(data);
@@ -374,13 +372,77 @@ function reportFolder_() {
   return it.hasNext() ? it.next() : DriveApp.createFolder('Fleet Fuel Reports');
 }
 
+// ---------------------------------------------------------------------------
+// Duplicate fuel entries (dashboard, read-only)
+//
+// A "duplicate" here means exactly one thing, by definition: same vehicle +
+// same calendar date + same amount. All three must match. This does not
+// widen to a fuzzy match, and it only ever looks at Fuel_Log — trip,
+// attendance and maintenance entries are out of scope for this check.
+//
+// This is a pure read + group operation: it never edits, voids or merges a
+// row. It only points at rows that look like a double entry so a human can
+// check them (and fix/void from Fix Entries if they agree).
+// ---------------------------------------------------------------------------
+
+/**
+ * Group non-voided Fuel_Log rows by vehicle + calendar date (Asia/Kolkata) +
+ * numeric amount, and return only the groups with more than one row.
+ *
+ * Dates are compared as calendar dates via Utilities.formatDate (not string
+ * equality), so a real Date, a serial or a typed "yyyy-MM-dd" all land on the
+ * same key. Amounts are parsed with toNum_ and rounded to 2 decimals, so
+ * "12.0", "12" and "12 " (trailing space) all match.
+ */
+function duplicateFuelGroups_() {
+  const regOf = vehicleRegMap_();
+  const groups = {};
+  getRows_(SHEETS.FUEL).forEach(function (r) {
+    if (isVoided_(r) || isBlank_(r.vehicle_id)) return;
+    const d = parseDate_(r.date);
+    const amt = toNum_(r.amount);
+    if (!d || amt === null) return;
+    const dayKey = Utilities.formatDate(d, TZ_(), 'yyyy-MM-dd');
+    const amtKey = round2_(amt).toFixed(2);
+    const key = r.vehicle_id + '|' + dayKey + '|' + amtKey;
+    (groups[key] = groups[key] || []).push({
+      entry_id: r.entry_id,
+      vehicle_id: r.vehicle_id,
+      reg_no: regOf[r.vehicle_id] || r.vehicle_id,
+      date: Utilities.formatDate(d, TZ_(), 'dd MMM yyyy'),
+      amount: round2_(amt),
+      litres: toNum_(r.litres),
+      product: r.product || 'Diesel',
+      bill_no: r.bill_no || '',
+      station: r.station || '',
+      odometer: toNum_(r.odometer),
+      entered_by: r.entered_by || ''
+    });
+  });
+  const out = [];
+  Object.keys(groups).forEach(function (key) {
+    const entries = groups[key];
+    if (entries.length < 2) return;
+    out.push({
+      vehicle_id: entries[0].vehicle_id,
+      reg_no: entries[0].reg_no,
+      date: entries[0].date,
+      amount: entries[0].amount,
+      count: entries.length,
+      entries: entries
+    });
+  });
+  out.sort(function (a, b) { return b.count - a.count || a.reg_no.localeCompare(b.reg_no); });
+  return out;
+}
+
 function styleReportTable_(table, hasTotalRow) {
   table.setBorderWidth(1);
   const totalRowIdx = hasTotalRow ? table.getNumRows() - 1 : -1;
-  // Sums to 734pt, just inside the 736pt of usable width (792 less two 28pt
+  // Sums to 690pt, within the 736pt of usable width (792 less two 28pt
   // margins). Driver Name is the widest because real names here run to about
   // 24 characters, and a wrapped name doubles its row's height.
-  const widths = [28, 44, 76, 42, 60, 36, 52, 118, 62, 48, 90, 40, 38];
+  const widths = [28, 76, 42, 60, 36, 52, 118, 62, 48, 90, 40, 38];
   for (var r = 0; r < table.getNumRows(); r++) {
     const row = table.getRow(r);
     for (var c = 0; c < row.getNumCells(); c++) {

@@ -44,9 +44,20 @@ Any live patch must be `clasp pull`ed back and reconciled before the next push.
 
 ## Footguns
 
-- **`onPrincipalEmails`, `onCEOEmails` and `onRejectionEmails` are read by
-  `getNotificationRecipients()` but nothing calls those stages.** Three of the
-  four notification paths were built and never wired up. TICKET-0001 wires the CEO stage and adds a new Admin Head stage. Don't assume a configured address means mail is being sent.
+- **`onPrincipalEmails` and `onRejectionEmails` are read by
+  `getNotificationRecipients()` but nothing calls those stages.** They remain
+  unwired. As of TICKET-0001, `onCEOEmails` and `onAdminHeadEmails` **are**
+  wired: `sendApprovalNotification(data)` in `NotificationService.js` fires on
+  submission (alongside `sendSubmissionNotification`) and sends to the
+  deduplicated union of the Admin Head and CEO recipient stages. Don't assume
+  a configured address means mail is being sent — that caution still applies
+  to `onPrincipalEmails` and `onRejectionEmails`.
+- `submitRequest()` in `RequestService.js` wraps `sendSubmissionNotification`
+  and `sendApprovalNotification` in **separate** try/catch blocks, so a
+  `MailApp` failure in one cannot suppress the other. This was deliberate as
+  of TICKET-0001 — if someone later "cleans up" by merging the two try/catches
+  back into one, a failure in either notification would silently swallow the
+  other, reintroducing the bug this ticket fixed.
 - `hrColName` / `hrColDept` / `hrColEmail` are **column letters** in the
   `ImportHR` sheet, held in Config. They exist because the HR import's column
   order is not ours to control — but they are still positional. Treat them as a
