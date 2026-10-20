@@ -127,7 +127,7 @@ Fuel reports go to `Fleet Fuel Reports`. Attendance PDFs go to `Fleet Attendance
 
 ## Change history
 
-2026-10-20 · T-T-508a · First draft written from the code
+2026-10-20 · T-508a · First draft written from the code
 
 ## Could not verify
 

@@ -162,7 +162,7 @@ its rows on the `Items` tab.
 
 ## Change history
 
-2026-10-20 · T-T-508b · First draft written from the code
+2026-10-20 · T-508b · First draft written from the code
 
 ## Could not verify
 
