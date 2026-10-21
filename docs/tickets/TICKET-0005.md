@@ -4,6 +4,34 @@
 **Type:** 🔍 **INVESTIGATE ONLY — DO NOT CHANGE CODE, DO NOT OPEN A PR**
 **Raised by:** Stella · **Owner:** Monica
 
+## Revision 2026-10-21: read the live v10 code, not the old v8 copy
+
+The first investigation (24 Sep) read the old v8 `doPost` (lines 557–615). That
+copy is gone: `projects/calllog/` now matches the **live script, version 10**.
+Read these, in this order:
+
+- `projects/calllog/CallLog_Sync.js` — `doPost` (line 48) → `dispatchPost`
+  (line 65). No `action` (or `action: "log"`) goes to the **legacy MacroDroid
+  path**; `action: "sync"` goes to `syncCalls` (line 160), the **Android app
+  path**, which de-duplicates by a deterministic id derived from the call itself.
+- `projects/calllog/CallLog_AppScript.js` — `handleLegacyPost` (line 573) and the
+  debounce block (≈ lines 583–592, `DEBOUNCE_SECONDS`).
+- `docs/` is not needed; the sync contract is described in comments at the top of
+  `CallLog_Sync.js`.
+
+What the first investigation found (about v8, may no longer hold): the debounce
+compares a new POST only with the sheet's last row and drops it, silently,
+when the number matches, the row is under 10 seconds old and untouched; it never
+checks the call direction. So two POSTs for the same number seconds apart
+collapse into one row.
+
+**Answer separately for each path** (legacy MacroDroid, and Android app `sync`):
+does the debounce still exist and is it still direction-blind; and for the app
+path, would two overlapping calls (one answered, one call-waiting) get different
+ids and both survive a sync? Say which path is likely in use now (the app was
+syncing on 2026-10-20; whether the MacroDroid macro is still running cannot be
+seen from here: say so).
+
 ## Reported behaviour
 
 > While answering a call, if another call comes in (call waiting), the Call Log
@@ -24,9 +52,9 @@ the wrong layer.
 
 ## What to do
 
-Read `CallLog_AppScript.js` and answer, on the issue:
+Read the v10 files named in the revision above and answer, on the issue:
 
-1. What exactly does `doPost` receive, and what fields does it require?
+1. What exactly does `doPost` receive on each path, and what fields does it require?
 2. Is there any path where a well-formed payload for the answered call could be
    **dropped, overwritten, or deduplicated away** server-side — for example by a
    same-timestamp or same-number collision, an upsert keyed on phone number, or
