@@ -1,13 +1,39 @@
 # The weekly sprint — how to run it
 
-The agent works Thursday 19:00 → Saturday 07:00 IST, one ticket per hour.
-Saturday morning you review what it produced. This is that routine.
+The agent works in two windows a week. The windows live in
+`.claude/agent-window.json` (`windows` list) and are the only source of truth;
+the times below are examples. At the time of writing: Tuesday 20:00 → Thursday
+08:00 IST (`tue-thu`, max 8 tickets) and Thursday 20:00 → Saturday 08:00 IST
+(`thu-sat`, max 10 tickets). Each run takes up to two tickets, and each window
+has a ticket cap (`max_tickets`). You review the morning each window closes.
+This is that routine.
+
+| Window | You review | Its PRs deploy on |
+|---|---|---|
+| Tue 20:00 → Thu 08:00 (`tue-thu`) | Thursday morning | Thursday 09:00–17:00 |
+| Thu 20:00 → Sat 08:00 (`thu-sat`) | Saturday morning | Tuesday 09:00–17:00 |
+
+Deploys run Tuesday and Thursday 09:00–17:00 only: a PR approved at Thursday
+morning's review goes live that Thursday; one approved at Saturday morning's
+review goes live the following Tuesday.
 
 ---
 
-## Before Thursday evening — queue the work
+## Before a window opens — queue the work
 
-Until the Sheet→GitHub sync exists (PRD Phase 2), this step is manual.
+**Normal path — nothing to do but queue it.** In the tracker, set a row's
+Status to "Queued for agent" and Assignee to "Claude". The next hourly sync
+opens the issue **with `approved`** (Config `agent_auto_approve`, default TRUE).
+In the window the agent's `ticket-writer` step reads the raw suggestion and
+either writes the ticket (`docs/tickets/auto/<Ref>.md`, in the PR for you to
+check) or stops with a comment — `blocked` (needs an RFC) or `needs-info` (it
+asked you up to three questions). Nothing reaches staff without your Approve
+tick on the Automated Runs tab.
+
+Set `agent_auto_approve` to FALSE in Config to go back to the manual path
+below, where the issue waits for you to write the ticket and add `approved`.
+
+### Manual path (a hand-written ticket, or `agent_auto_approve` off)
 
 For each suggestion you want worked:
 
@@ -31,7 +57,7 @@ right call more often than it feels like it should be.
 
 ---
 
-## Saturday morning — review
+## Review mornings (Thursday and Saturday)
 
 ```bash
 cd ~/Public/PROJECTS/Christwood/christwood-estate
@@ -55,7 +81,7 @@ it could not check?
 
 ---
 
-## Saturday morning — verify and push
+## After review — verify and push
 
 Apps Script has staging built in. `clasp push` updates **HEAD** only; the live
 `/exec` URL keeps serving the deployed version until you promote it. Nobody is
@@ -76,15 +102,15 @@ obviously-fake test data and clean it up, exactly as the test steps say. For a
 change that could corrupt existing data rather than just add rows, take a copy
 of the Sheet and test against that instead.
 
-Happy? Promote:
+Happy? Promote, **as the account named in the project's `PROJECT.md` `Runs as`
+row** (for most projects that is automations@), **in a browser, editing the
+existing deployment**: Apps Script editor → Deploy → Manage deployments → edit
+the existing deployment → Version: New version → Deploy. The `/exec` URL staff
+use does not change. Not happy? Do nothing — HEAD stays as a draft and the live
+version is untouched.
 
-```bash
-clasp deploy --deploymentId <the live deployment id> --description "S-XXXXXXXX <what changed>"
-```
-
-That repoints the existing `/exec` URL at a new version. The URL staff use does
-not change. Not happy? Do nothing — HEAD stays as a draft and the live version
-is untouched.
+⚠️ Never use `clasp deploy` for a project that runs as automations@ — it would
+deploy as the wrong account. Never create a new deployment where one exists.
 
 Then close the loop:
 
@@ -108,12 +134,15 @@ And update the tracker row to `Done`.
 
 ## Controls
 
-| To do this | Change this in `.claude/agent-window.json` |
+| To do this | Do this |
 |---|---|
-| Stop everything now | `agent_enabled: false` |
-| Run past Saturday | `override_until: "2026-09-22T18:00:00+05:30"` |
-| Change the weekly window | `weekly_window.start` / `.end` |
+| Stop everything now | `.claude/agent-window.json`: `agent_enabled: false` |
+| Pause the agent without a code change | Add the GitHub label `agent-paused` to any open issue (create the label if it is missing). The routine stops with "paused" while one is open. A tracker Config row `agent_paused` that would automate this is planned and not yet built |
+| Run outside the windows once | `override_until: "2026-09-22T18:00:00+05:30"` — one-off; an expired value is ignored and never blocks later windows |
+| Change a window or its cap | `windows[].start` / `.end` / `.max_tickets` |
+| Change tickets per run or run length | `max_tickets_per_run`, `run_time_budget_minutes` |
+| Stop deploying approved PRs | Set the `agent_deploy_enabled` row to FALSE on the Config tab of the Projects Tracker. This stops deployments; the routine does not read it |
 | Stop one ticket | Remove its `approved` label |
 
-All of it takes effect on the next hourly run. The routine reads the window
+All of it takes effect on the next hourly run. The routine checks the window
 before it reads anything else, so a closed window costs seconds.

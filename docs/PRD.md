@@ -1,3 +1,5 @@
+> Superseded where it disagrees by the Projects Tracker repo's docs/PRD-agent-pipeline-v2.md (windows, approvals, deploy identity). §8's agent_until was never built.
+
 # PRD — Autonomous Suggestions Pipeline
 
 **Org:** Christwood
