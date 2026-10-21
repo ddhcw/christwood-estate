@@ -132,8 +132,13 @@ const DEFAULT_SETTINGS = [
   ['low_efficiency_kmpl', '', 'Optional: always warn if a vehicle drops below this km/L (leave blank to ignore)'],
   ['fuel_price_per_litre', '', 'Current fuel price per litre. Auto-fills litres from the amount and flags odd fuel entries. Blank = off'],
   ['fuel_price_tolerance_pct', '25', 'Flag a fuel entry if its price per litre is more than this % away from fuel_price_per_litre'],
+  // service_interval_km / service_warn_km are no longer read by the service-due
+  // check (RFC-0002 replaced km with a fleet-wide date) but stay in the sheet —
+  // deleting a Settings row would destroy whatever value is already entered.
   ['service_interval_km', '10000', 'A scheduled service is due every this many km'],
   ['service_warn_km', '500', 'Start warning when a vehicle is within this many km of a due service'],
+  ['service_due_date', '', 'Fleet-wide date the next service is due (yyyy-MM-dd). Leave blank to turn off the service-due check'],
+  ['service_interval_months', '12', 'After service_due_date passes, a vehicle counts as serviced if it has a Scheduled maintenance record within this many months before that date'],
   ['silent_vehicle_days', '21', 'Flag an active vehicle with no fuel entry for this many days'],
   ['odo_jump_km', '3000', 'Flag when consecutive odometer readings jump by more than this many km'],
   ['off_road_reminder_days', '7', 'Remind us if a vehicle has been marked "Under maintenance" this long — it is usually someone forgetting to mark it back on road'],
