@@ -22,8 +22,12 @@ review goes live the following Tuesday.
 ## Before a window opens — queue the work
 
 **Normal path — nothing to do but queue it.** In the tracker, set a row's
-Status to "Queued for agent" and Assignee to "Claude". The next hourly sync
+Status to "Queued for agent" and Assignee to "Claude". The next hourly push
 opens the issue **with `approved`** (Config `agent_auto_approve`, default TRUE).
+The push only sends rows queued by a Lead, and only to the repo the project's
+`GitHub Repo` cell names. A row that fails either check is **held, not sent**:
+its note reads "Not sent: …", and it appears under On hold on the Control Room
+tab until the cell is fixed.
 In the window the agent's `ticket-writer` step reads the raw suggestion and
 either writes the ticket (`docs/tickets/auto/<Ref>.md`, in the PR for you to
 check) or stops with a comment — `blocked` (needs an RFC) or `needs-info` (it
@@ -78,6 +82,29 @@ Read every PR body in this order, and do not skip the third:
 Judge the *pipeline* as much as the code: did it stay inside its project
 directory, keep secrets and names out of source, and tell the truth about what
 it could not check?
+
+**Before you start, check the tracker's Control Room tab** (or the dashboard's
+"Control room" view). Its health line says whether the window went as expected:
+
+- **Healthy** — the agent ran through the window. Read the PRs and the events.
+- **No runs** or **Silent** (red) — the agent did not run, or went quiet. Check
+  the routine at claude.ai/code before you read anything else.
+- **Failed** (red) — at least one run failed. Its event says why.
+- **Can't tell** (grey) — GitHub has not been read since the window end. Use
+  Tracker Tools → Agent → Refresh now in the tracker, then look again.
+
+The Control Room also lists **Needs you** (answers and decisions for you),
+**On hold** (queued rows that were not sent, usually a missing `GitHub Repo`),
+and **Queue** (what is waiting for the next window).
+
+The window-end Chat digest arrives about 09:00–10:00 on the review morning. It
+gives the same counts and the top items, with a button to the control room. If
+no digest arrives, the Control Room is still the place to look.
+
+**Heartbeat issue.** Each run comments once on one locked issue, titled
+`Pipeline heartbeat YYYY-MM`, in the agent repo. The tracker starts a new one
+each month at the window end. Do not close it by hand. A window with no
+heartbeat comments means the routine did not run in that window.
 
 ---
 
