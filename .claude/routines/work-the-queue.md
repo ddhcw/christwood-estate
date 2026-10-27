@@ -21,7 +21,9 @@ do not read the repo, do not do anything else.
 3. If `node` is not available, say "node unavailable, using prose rules" and
    apply the fallback rules below instead.
 4. Only after the window is open: if any open issue carries the label
-   `agent-paused`, stop and say "paused". Do nothing else.
+   `agent-paused`, stop and say "paused". Do nothing else, except post the
+   Step 7 `run_summary` heartbeat (outcome `paused`) and nothing more. Do not
+   claim or work any ticket.
 
 ### Fallback rules (only if `node` is unavailable)
 
@@ -238,7 +240,7 @@ outcomes and no others:
 | `queue_empty` | Step 2 found no ticket to take |
 | `worked` | at least one ticket was taken and the run ended normally (PR opened, draft PR, investigate-only, or a NEEDS-RFC / NEEDS-INFO / NO-HOME / BLOCKED-RFC refusal) |
 | `cap_reached` | stopped on the per-window cap (`window cap reached`) before taking a ticket |
-| `paused` | stopped because an open issue carries `agent-paused` (Step 1.4). This is the one thing allowed to follow that stop; Step 1's "do nothing else" does not forbid the heartbeat |
+| `paused` | stopped because an open issue carries `agent-paused` (Step 1.4, which allows this heartbeat) |
 | `failed` | a ticket failed ("If something goes wrong"), or the run stopped on an error |
 
 A window that is closed (Step 1 exit 1 or 2) still costs nothing: no heartbeat
