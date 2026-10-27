@@ -21,7 +21,9 @@ do not read the repo, do not do anything else.
 3. If `node` is not available, say "node unavailable, using prose rules" and
    apply the fallback rules below instead.
 4. Only after the window is open: if any open issue carries the label
-   `agent-paused`, stop and say "paused". Do nothing else.
+   `agent-paused`, stop and say "paused". Do nothing else, except post the
+   Step 7 `run_summary` heartbeat (outcome `paused`) and nothing more. Do not
+   claim or work any ticket.
 
 ### Fallback rules (only if `node` is unavailable)
 
@@ -89,6 +91,7 @@ issue as the LAST action, after the final comment, label change and marker is
 done. This covers success and every stop and failure. The stop paths, so none
 is skipped:
 
+0. NO-HOME (Step 2a).
 1. NEEDS-RFC (Step 2b).
 2. NEEDS-INFO (Step 2b), including the outside-the-repo redirect to Step 3b if
    that path then stops.
@@ -118,6 +121,21 @@ if the key is missing). Do not start another ticket if ANY of these hold:
 4. The per-window cap above would be reached.
 
 When another ticket is allowed, repeat Step 2 onward (claim, then work) for it.
+
+## Step 2a — does the project live in this repo?
+
+Right after the claim, check that the issue's project has a `projects/<slug>/`
+folder in this repo. If it does not:
+
+1. Post ONE comment on the issue. If the table in `CLAUDE.md` ("What is and is
+   not in this repo") names the repo the project belongs in, say which repo.
+   If it does not, say only that this repo has no home for it. Do not guess a
+   repo name. End the comment with a `verdict` marker (`"verdict":"NO-HOME"`).
+2. Remove `approved`, add `blocked`, apply the Release rule, and stop. No
+   branch, no PR.
+
+Never use `NEEDS-INFO` or `FAILED` for this: the problem is where the work was
+sent, not a missing detail or a crash.
 
 ## Step 2b — no ticket yet? Decide first, build second
 
@@ -210,10 +228,63 @@ Remove `agent-working` from the issue (the Release rule). Then go back to Step 2
 allow another ticket; otherwise stop. Do not tidy the repo. Do not start
 anything nobody asked for.
 
+## Step 7 — run heartbeat (every run that got past the window check)
+
+At the end of EVERY run that got past the Step 1 window check, post exactly one
+comment on the newest OPEN issue labelled `pipeline-heartbeat`. This is the
+last thing you do, after every Release-rule removal. It applies to these
+outcomes and no others:
+
+| `outcome` | When |
+|---|---|
+| `queue_empty` | Step 2 found no ticket to take |
+| `worked` | at least one ticket was taken and the run ended normally (PR opened, draft PR, investigate-only, or a NEEDS-RFC / NEEDS-INFO / NO-HOME / BLOCKED-RFC refusal) |
+| `cap_reached` | stopped on the per-window cap (`window cap reached`) before taking a ticket |
+| `paused` | stopped because an open issue carries `agent-paused` (Step 1.4, which allows this heartbeat) |
+| `failed` | a ticket failed ("If something goes wrong"), or the run stopped on an error |
+
+A window that is closed (Step 1 exit 1 or 2) still costs nothing: no heartbeat
+comment, no issue listing.
+
+Shape: a one-line human sentence, then the marker, nothing else:
+
+```
+🤖 Run finished (window <name>): <outcome words>.
+<!-- pipeline-event {"type":"run_summary","window":"<name>","outcome":"<outcome>","claimed":[<Refs>],"run":"<session link or unknown>","at":"<ISO with +05:30>"} -->
+```
+
+`window` is the name from the window-check line. `claimed` lists the Refs
+(quoted strings) of every ticket you claimed this run, empty `[]` if none.
+`run` and `at` follow the Markers rules. The comment contains no staff names,
+no URL other than the session link, and no project details.
+
+If no open `pipeline-heartbeat` issue exists, say "no heartbeat issue" in your
+run output and carry on. You must never create one (the tracker owns that issue). If the
+comment fails to post, say so in your run output; do not retry in a loop.
+
+Worked examples (window `tue-thu`; Refs are made up):
+
+```
+🤖 Run finished (window tue-thu): queue empty.
+<!-- pipeline-event {"type":"run_summary","window":"tue-thu","outcome":"queue_empty","claimed":[],"run":"unknown","at":"2026-10-22T07:53:40+05:30"} -->
+
+🤖 Run finished (window tue-thu): worked on 1 ticket.
+<!-- pipeline-event {"type":"run_summary","window":"tue-thu","outcome":"worked","claimed":["S-0A1B2C3D"],"run":"unknown","at":"2026-10-22T03:12:09+05:30"} -->
+
+🤖 Run finished (window tue-thu): window cap reached.
+<!-- pipeline-event {"type":"run_summary","window":"tue-thu","outcome":"cap_reached","claimed":[],"run":"unknown","at":"2026-10-21T22:05:51+05:30"} -->
+
+🤖 Run finished (window tue-thu): paused.
+<!-- pipeline-event {"type":"run_summary","window":"tue-thu","outcome":"paused","claimed":[],"run":"unknown","at":"2026-10-21T21:04:30+05:30"} -->
+
+🤖 Run finished (window tue-thu): failed.
+<!-- pipeline-event {"type":"run_summary","window":"tue-thu","outcome":"failed","claimed":["S-0A1B2C3D"],"run":"unknown","at":"2026-10-22T01:40:18+05:30"} -->
+```
+
 ## Markers
 
 Every comment you write on an issue or PR (including the PR body) ends with one
-final line:
+final line (the Step 7 heartbeat comment uses the `run_summary` shape given there):
 
 `<!-- pipeline-event {"type":"…","ref":"…","run":"…","at":"ISO"} -->`
 
@@ -222,11 +293,12 @@ A `verdict` marker also carries a `"verdict"` field:
 `<!-- pipeline-event {"type":"verdict","verdict":"READY","ref":"…","run":"…","at":"ISO"} -->`
 
 - `type` is one of: `run_claimed`, `verdict`, `ticket_written`, `pr_opened`, `pr_linked`,
-  `draft_pr`, `run_failed`.
+  `draft_pr`, `run_failed`, `run_summary` (heartbeat, Step 7).
 - `verdict` values: `READY`, `NEEDS-RFC`, `NEEDS-INFO` (ticket-writer outcomes),
   `EXISTING-TICKET` (hand-written ticket, ticket-writer not run),
   `INVESTIGATE` (investigate-only), `BLOCKED-RFC` (RFC not Accepted),
-  `FAILED` (claimed, then failed before any other verdict was posted).
+  `FAILED` (claimed, then failed before any other verdict was posted),
+  `NO-HOME` (the project has no `projects/<slug>/` in this repo, Step 2a).
 - A `verdict` marker is posted for EVERY ticket the run starts, exactly once.
   The per-window cap in Step 2 counts these. A ticket that fails after already
   getting a verdict (for example READY, then the implementer crashes) does not
@@ -245,12 +317,14 @@ Which comment gets which marker (no comment is left without one):
 | NEEDS-RFC refusal comment | `verdict` | `NEEDS-RFC` |
 | NEEDS-INFO questions comment | `verdict` | `NEEDS-INFO` |
 | RFC not Accepted comment | `verdict` | `BLOCKED-RFC` |
+| Project has no folder in this repo | `verdict` | `NO-HOME` |
 | Investigate-only findings comment | `verdict` | `INVESTIGATE` |
 | PR body (normal PR) | `pr_opened` | none |
 | PR-link comment on the issue | `pr_linked` | none |
 | PR body (draft PR) and its link comment on the issue | `draft_pr` | none |
 | Failure comment, ticket has no verdict yet | `verdict` AND `run_failed` (two marker lines, `verdict` first) | `FAILED` |
 | Failure comment, ticket already has a verdict | `run_failed` | none |
+| Run heartbeat on the `pipeline-heartbeat` issue (Step 7) | `run_summary` | none (carries `window`, `outcome`, `claimed` instead) |
 
 ## If something goes wrong
 
