@@ -86,7 +86,9 @@ Secrets live in Script Properties, never in source. The Fleet menu sets them.
 - `ADMIN_PIN_HASH`: the salted hash of the admin PIN.
 - `ADMIN_PIN_SALT`: the salt for that hash.
 
-Settings tab keys (values live in the Sheet): `app_title`, `currency_symbol`, `distance_unit`, `volume_unit`, `alert_email`, `doc_expiry_warning_days`, `replace_window_months`, `replace_maint_costkm_rise_pct`, `replace_efficiency_drop_pct`, `replace_downtime_rise_days`, `replace_require_all_three`, `low_efficiency_kmpl`, `fuel_price_per_litre`, `fuel_price_tolerance_pct`, `service_interval_km`, `service_warn_km`, `silent_vehicle_days`, `odo_jump_km`, `off_road_reminder_days`, `odo_broken_reminder_days`, `licence_warning_days`, `weekly_digest`, `monthly_report`, `backup_keep`, `school_name`, `fuel_report_title`, `fuel_report_rows_per_page`, `fuel_report_station`, `report_prepared_by`, `report_prepared_title`, `report_verified_by`, `report_verified_title`, `report_approved_by`, `report_approved_title`, `attendance_week_off`, `attendance_reminder`.
+Settings tab keys (values live in the Sheet): `app_title`, `currency_symbol`, `distance_unit`, `volume_unit`, `alert_email`, `doc_expiry_warning_days`, `replace_window_months`, `replace_maint_costkm_rise_pct`, `replace_efficiency_drop_pct`, `replace_downtime_rise_days`, `replace_require_all_three`, `low_efficiency_kmpl`, `fuel_price_per_litre`, `fuel_price_tolerance_pct`, `service_interval_km`, `service_warn_km`, `service_due_date`, `service_interval_months`, `silent_vehicle_days`, `odo_jump_km`, `off_road_reminder_days`, `odo_broken_reminder_days`, `licence_warning_days`, `weekly_digest`, `monthly_report`, `backup_keep`, `school_name`, `fuel_report_title`, `fuel_report_rows_per_page`, `fuel_report_station`, `report_prepared_by`, `report_prepared_title`, `report_verified_by`, `report_verified_title`, `report_approved_by`, `report_approved_title`, `attendance_week_off`, `attendance_reminder`.
+
+Since RFC-0002 (`TICKET-0004`), `service_due_date` and `service_interval_months` drive `computeServiceDue_` (`Reports.js`). `service_interval_km`/`service_warn_km` are kept as Settings rows (deleting rows destroys entered data) but are no longer read by that calculation.
 
 The manifest sets the time zone to `Asia/Kolkata`. The Sheet's time zone is pinned to match during setup.
 
@@ -124,10 +126,17 @@ Fuel reports go to `Fleet Fuel Reports`. Attendance PDFs go to `Fleet Attendance
 - The fuel report PDF (`FuelReport.js`) has no route-number column. It was removed by TICKET-0006, which supersedes TICKET-0002. This was deliberate, not a regression. The `routeOf` lookup, the `route_no` field on report rows, the `'Route No'` header, and its entry in the `widths` array were all removed together so the table stays aligned. Route numbers on vehicles, drivers, roster and attendance (`VehicleAdmin.html`, `DriverAdmin.html`, `Attendance.js`, `AttendanceForm.html`, roster views in `Script.html`) are a separate, unrelated lookup and were untouched. Do not conflate the two if a future ticket asks about "route numbers" again.
 - When a vehicle's odometer is out of action, its fuel and maintenance are still logged, but km, cost per km and km per litre pause for it. Every day it stays broken is a month with no cost per km figure. The `odo_broken_reminder_days` setting reminds the admin about this.
 - The admin PIN is a sensible lock for a school office, not a bank-grade secret. Only the salted hash is stored. Setting a new PIN from the Fleet menu does not ask for the old one.
+- Since RFC-0002, fleet-wide service-due tracking is entirely date-driven via
+  the `service_due_date` Settings row — the odometer/km basis was dropped. If
+  the transport department never sets that date, or sets it once and lets it
+  go stale, no vehicle will ever be flagged as due and the system will not
+  complain; there is no automated backstop for a missing or stale date. This
+  is a known accepted risk from RFC-0002, not a bug.
 
 ## Change history
 
 2026-10-20 · T-508a · First draft written from the code
+2026-09-18 · S-A433C6E9 · TICKET-0004: service-due switched from km-based to a fleet-wide date (RFC-0002)
 
 ## Could not verify
 
