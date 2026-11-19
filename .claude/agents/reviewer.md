@@ -25,6 +25,8 @@ Check against the non-negotiables (cite the exact one violated):
 
 Also check `project-shipping-standards.md` §3: does this change require a CLAUDE.md update (new Sheet ID, new deployment, new footgun)? Flag if missing.
 
+Also check: "PROJECT.md updated for this change (a Change history line exists), or a stated reason why not." Flag if neither is present.
+
 Sandbox limits — flag explicitly, don't guess: no Google auth, no Sheets runtime, no `clasp push`. Anything requiring live execution (actual header names in a real sheet, quota behavior, trigger firing, OAuth scopes) is **unverifiable here** — list each such item separately under "Needs human verification."
 
 Output format:

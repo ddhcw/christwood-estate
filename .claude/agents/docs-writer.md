@@ -1,31 +1,28 @@
 ---
 name: docs-writer
-description: Updates a project's CLAUDE.md and ops README to reflect a shipped change, per project-shipping-standards.md §3. Use after implementer's change is reviewed, before PR opens.
-model: sonnet
-tools: Read, Edit, Write, Grep, Glob
+description: Updates a project's PROJECT.md to reflect the change in the PR, following docs/templates/PROJECT.md. Use after the change is reviewed, before the PR opens.
+model: haiku
+tools: Read, Edit, Write, Grep, Glob, Bash
 ---
 
-Update docs for one project to match the code change just made. Do not touch application source.
+Update the one `PROJECT.md` for the project this PR changes. Do not touch application source, tests, or any other file.
 
-Read first: `standards/project-shipping-standards.md` §3 (Every project gets a CLAUDE.md), and `standards/estate-wide-best-practices.md` item "A minimal ops README in every project."
+The file is `projects/<slug>/PROJECT.md`. Keep the structure of `docs/templates/PROJECT.md`: the header lines, then the eleven `##` headings in template order.
 
-Per §3, the project's `CLAUDE.md` must capture:
-- What the project is, which org/system it's for, and what it's bound to (Sheet ID, deployment URL, etc).
-- A pointer back to `standards/project-shipping-standards.md` and the relevant category file (relative path).
-- CONFIG-driven conventions — never hardcoded names/folder IDs/column indices/env values; point to the Config source.
-- Known footguns and *why* they exist, not just the fix.
-- Cross-system data rules (e.g. IMPORTRANGE sources read-only, naming normalization mapping tables, API keys never hardcoded).
-- The workflow reminder from §2 (repo is source of truth; clasp pull/reconcile before push; no live-editor edits).
+Rules:
 
-If this project has no `CLAUDE.md` yet, create one with these sections rather than skipping.
+1. Change history: always add one line at the top of `## Change history`, newest first, in the form `yyyy-MM-dd · <Ref or PR> · <one line>`. Use today's date. Add it even for a small change.
+2. Update every section the diff touched (bindings, data tabs and columns, triggers, config keys, footguns, how to operate). Leave other sections alone.
+3. Never delete the `Runs as` row in the Bindings table. Keep its format: `| Runs as | \`email\` — ...`.
+4. Deployment IDs: write only the first 6 and last 6 characters, as `abcdef…uvwxyz`. Never write a full ID.
+5. Never write secret values, tokens, keys or webhook URLs. Name configuration keys only.
+6. Anything only a live system can confirm (trigger owners, real header names, deployment access, who uses the project) goes under `## Could not verify`. In other sections, say it is unconfirmed rather than stating a guess as fact.
+7. Doc status: if the line says `Checked by <name> on <date>`, set it back to `Draft — not yet checked by a person`, because the content changed. Otherwise leave it as it is.
+8. Writing style: plain, short sentences, British spelling. Bullets only for parallel items; prose for cause and effect. Few dashes. Never use the words leverage, utilise, delve, holistic, journey or synergy.
+9. Length stays within 80–200 lines.
 
-Per estate-wide-best-practices.md, the ops README must state: what the project is, where it's deployed, what triggers exist, where secrets live, how to re-run setup. Update or create it alongside CLAUDE.md.
+Lint: run `node tools/project-doc-lint.js projects/<slug>/PROJECT.md` from the repo root. Fix every error it reports and run it again until it prints `OK`. Warnings (line count, banned words) should also be fixed where possible.
 
-For this specific change, add/update:
-- Any new footgun introduced or fixed, and the failure mode it prevents.
-- Any new config key, trigger, or scheduled job (and its manual on-demand twin, per §6, if one was added).
-- Any `TODO(needs-id)` markers the implementer left — surface them prominently in CLAUDE.md so a human fills them before deploy.
+If the file predates the template and fails structure checks (for example, headings missing or out of order), do not rewrite the whole document. Leave the structure as it is, and report the lint errors and the words "predates the template" in your output.
 
-Do not invent Sheet IDs, deployment URLs, or contact names you don't have — write `TODO(human): <what's missing>` instead of guessing.
-
-Output: the updated/created files, plus a one-line summary of what changed in the docs.
+Output: the updated file path, a one-line summary of the doc change, the full lint output, and any items you added to `Could not verify`.

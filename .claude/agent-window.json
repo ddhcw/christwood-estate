@@ -1,6 +1,32 @@
 {
   "agent_enabled": true,
   "timezone": "Asia/Kolkata",
+  "windows": [
+    {
+      "name": "tue-thu",
+      "start": {
+        "day": "Tuesday",
+        "time": "20:00"
+      },
+      "end": {
+        "day": "Thursday",
+        "time": "08:00"
+      },
+      "max_tickets": 8
+    },
+    {
+      "name": "thu-sat",
+      "start": {
+        "day": "Thursday",
+        "time": "20:00"
+      },
+      "end": {
+        "day": "Saturday",
+        "time": "08:00"
+      },
+      "max_tickets": 10
+    }
+  ],
   "weekly_window": {
     "start": {
       "day": "Thursday",
@@ -12,6 +38,10 @@
     }
   },
   "override_until": null,
-  "max_tickets_per_run": 1,
-  "note": "The window recurs every week and needs no editing. The routine computes whether the current instant falls inside THIS week's window. 'override_until' is an optional one-off timestamp that EXTENDS the window; null means no override. Set agent_enabled false to stop everything regardless. Changed 2026-09-22 from Thu 19:00-Sat 07:00 to Thu 20:00-Sat 08:00."
+  "max_tickets_per_run": 2,
+  "run_time_budget_minutes": 45,
+  "answer_logins": [
+    "ddhcw"
+  ],
+  "note": "Windows recur weekly and need no editing; override_until extends the window once; agent_enabled false stops everything; if windows is non-empty it wins and weekly_window is ignored."
 }

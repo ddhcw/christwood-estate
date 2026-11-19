@@ -32,6 +32,9 @@ suggestion → RFC (if non-trivial) → ticket → branch → PR → human revie
   step).
 - **Never invent a Spreadsheet ID, Drive folder ID, deployment ID or email address.**
   If you need one, write `TODO(human)` and say so in the PR.
+- **Deployments belong to the account named in each project's `PROJECT.md`
+  `Runs as` row.** Never change a deployment from another account, and never
+  create a new deployment where one exists (edit the existing one).
 - **Never add a secret.** Secrets live in Script Properties.
 - You cannot execute Apps Script here. State plainly what you could not verify.
 
