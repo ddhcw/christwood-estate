@@ -21,7 +21,7 @@ PRD §14: a new trigger (`gpsWatchdog`), new work inside the nightly `rebuildAna
 
 | Job | Where | Cadence | Manual twin |
 |---|---|---|---|
-| `gpsWatchdog` | new time-driven GAS trigger, installed by `installTriggers` | every 5 min, **only inside service windows** (`gps_service_days`, trip windows ± `gps_window_grace_min`) | Menu: "Run GPS watchdog now" |
+| `gpsWatchdog` | new time-driven GAS trigger, installed by its own menu item `installGpsTriggers` (G-C; `installTriggers` is untouched) | every 15 min (PRD R12), **only inside service windows** (`gps_service_days`, trip windows ± `gps_window_grace_min`) | Menu: "Check GPS now" |
 | `gpsDailyPull` | inside `rebuildAnalytics` | nightly | Menu: "Pull GPS summary for a date" |
 | ROSTER pre-check and GCM reconcile | inside `rebuildAnalytics` (feeder side, RFC-GPS-6) | nightly | Menu twin per PRD R39 |
 | Worker crons | Worker repo | per its `wrangler.toml` | `/v1/admin/run-cron` |
@@ -31,8 +31,8 @@ Constraints:
 
 - Every job is idempotent: `gpsDailyPull` upserts `GPS_Daily` on `day_key`; running twice leaves one row (R22).
 - Jobs are resumable and stay under the 6-minute limit; a failed job posts to Ops Alerts (RFC-GPS-3), never fails silently.
-- Triggers are created only through `installTriggers`, which deletes and re-creates the triggers for its `HANDLERS` list. The new handler is added to that list so a re-run cannot stack duplicates. (Changing `installTriggers` is a later ticket, not G-A.)
-- The watchdog reads Worker `/v1/health` with the config secret; the secret lives in Script Properties only.
+- G-C amendment: the watchdog trigger is created only by `installGpsTriggers` (Fleet > Turn on GPS watchdog), which deletes any existing `gpsWatchdog` trigger before creating the single 15-minute one, so a re-run cannot stack duplicates. It never runs automatically. `installTriggers` is not changed, so re-running it cannot remove the watchdog.
+- G-C amendment: the Worker's `/v1/health` is a read endpoint, so the watchdog uses `GPS_READ_SECRET` (not the config secret). Secrets live in Script Properties only.
 
 ## Rejected alternatives
 

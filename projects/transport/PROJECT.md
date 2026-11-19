@@ -68,3 +68,13 @@ confirmed identical to the local working copy. Per shipping standards §2:
 - `gps_enabled = Yes` in Settings opens the views. Live data is cached 20 s; if the Worker is down the last copy shows under a red banner.
 - `GPS_Access_Log` rows: one per viewer per view per 5 minutes (auto-refresh is not logged again).
 - Tests: `cd projects/transport && node --test test/`. Not verified here: anything needing the Apps Script runtime, the live Worker, or a browser.
+
+## GPS ops — G-C
+
+- New files: `GpsWatchdog.js` (15-minute watchdog, Ops Alerts with email fallback, one alert and one recovery per episode), `GpsDaily.js` (nightly and manual upsert of `GPS_Daily` on `day_key`; called from `rebuildAnalytics` inside a try/catch).
+- Menu: Fleet > Check GPS now / Pull GPS summary for a date / Turn on GPS watchdog (managers only). The trigger is installed only by that menu item.
+- Script Properties added: `OPS_ALERTS_WEBHOOK` (names only here; values never in files). `GPS_WATCHDOG_STATE` is bookkeeping.
+- Settings read: `gps_alerts_enabled`, `gps_enabled`, `gps_service_days`, `gps_window_grace_min`, `alert_email`, and `feeder_heartbeat` (optional; absent until the feeder exists).
+- The deploying account must re-authorise once for the `script.external_request` scope.
+- Full ops guide: `docs/OPS-GPS.md`. Contact and Worker URL are `TODO(human)` there.
+- Not verified without the Apps Script runtime: the real trigger, Chat webhook, mail, and `UrlFetchApp` behaviour.

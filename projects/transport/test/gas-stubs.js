@@ -38,7 +38,7 @@ function makeRange(sh, r, c, nr, nc) {
     },
     getA1Notation() { return [r, c, nr, nc].join(':'); }
   };
-  ['setFontWeight', 'setFontColor', 'setBackground', 'setVerticalAlignment'].forEach((k) => { range[k] = fmt(k); });
+  ['setFontWeight', 'setFontColor', 'setBackground', 'setVerticalAlignment', 'setNumberFormat'].forEach((k) => { range[k] = fmt(k); });
   return range;
 }
 
@@ -85,12 +85,15 @@ function loadGas(files, opts) {
   const cacheStore = {};
   const propStore = Object.assign({}, opts.props || {});
   const state = { activeEmail: opts.email || '', logs: [], cachePuts: 0, now: 0, fetchCalls: [], sleeps: [],
-    fetchHandler: opts.fetch || null, cacheStore, propStore, templates: [] };
+    fetchHandler: opts.fetch || null, mails: [], mailFails: false, triggers: [], cacheStore, propStore, templates: [] };
   const sandbox = {
     console, JSON, Math, Date, Object, Array, String, Number, isFinite, parseFloat, Error,
     Logger: { log: (m) => state.logs.push(String(m)) },
     Session: { getActiveUser: () => ({ getEmail: () => { if (state.throwIdentity) throw new Error('no'); return state.activeEmail; } }),
-               getScriptTimeZone: () => 'Asia/Kolkata' },
+               getScriptTimeZone: () => 'Asia/Kolkata', getEffectiveUser: () => ({ getEmail: () => 'owner@x.test' }) },
+    MailApp: { sendEmail: (m) => { if (state.mailFails) throw new Error('mail down'); state.mails.push(m); } },
+    ScriptApp: { getProjectTriggers: () => state.triggers.slice(), deleteTrigger: (t) => { state.triggers = state.triggers.filter((x) => x !== t); },
+      newTrigger: (fn) => { const t = { fn, getHandlerFunction: () => fn }; const b = { timeBased() { return b; }, everyMinutes(n) { t.minutes = n; return b; }, create() { state.triggers.push(t); return t; } }; return b; } },
     SpreadsheetApp: {
       getActiveSpreadsheet: () => ss,
       newDataValidation: ruleBuilder, newConditionalFormatRule: ruleBuilder,
