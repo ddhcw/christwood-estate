@@ -25,6 +25,7 @@ function onOpen() {
     .addItem('1) Set up workbook', 'setupWorkbook')
     .addItem('2) Set / change admin PIN', 'setAdminPin')
     .addSeparator()
+    .addItem('Validate GPS setup', 'menuValidateGps')
     .addItem('Rebuild dashboard now', 'rebuildAnalytics')
     .addItem('Fuel report — last month', 'menuFuelReportLastMonth')
     .addItem('Run morning checks now', 'morningChecks')
