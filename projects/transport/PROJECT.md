@@ -121,6 +121,14 @@ Columns are listed in the order and spelling of `HEADERS` in `Setup.js`. The cod
 
 `installTriggers` creates the five triggers above. It is not scheduled itself. It runs from the Fleet menu item "Turn on automatic updates". It first deletes any existing copies of those five, so running it again is safe. `checkDocumentExpiry` is an old name for `morningChecks`, kept so that any older trigger still works. It is not a trigger in the code.
 
+## GPS stop-event intake — G-D
+
+- New file: `GpsEvents.js`. It adds the first `doPost` in this project, a PUBLIC endpoint (the app is `ANYONE_ANONYMOUS`). It accepts only batches from the Worker signed with HMAC-SHA256 (`ts` and `sig` query params, string `${ts}.${body}`, 5-minute window, 100,000-character cap, strict schema, at most 50 events). Any failure answers `{"ok":false}` with no detail. It never logs the body or the signature.
+- Script Property added: `GPS_EVENT_HMAC_KEY` (name only; same value as the Worker secret `GAS_EVENT_HMAC_KEY`). Set it by hand; there is no menu item and the value is never in files.
+- What it writes: new rows in `Parent_Notify_Log` (one per notify=Yes student per event, key `trip_run_id|admission_no|event_type`), in one write under the script lock, flushed before the reply. Repeats are skipped. New Settings key `gcm_send_window` (07:00-19:00). New log column `expires_at`, added at the end by `setupGpsTabs`; run it once before turning delivery on.
+- Row status follows `parent_notify_mode`: `shadow_local` gives `local_only`; `shadow_gcm` and `live` give `pending_feed` only for types in `parent_notify_types` (stop-level types also need `gate_l_passed` = Yes; `live` also needs the trip in `parent_notify_trips`), else `local_only` with the reason in `suppressed_reason`. Outside `gcm_send_window`, or past `expires_at`, the row is `suppressed`. `off` drops the batch.
+- Deploying: the web app must be redeployed as a new version for `doPost` to exist. See RFC-GPS-2.
+
 ## Config and secrets
 
 Secrets live in Script Properties, never in source. The Fleet menu sets them.

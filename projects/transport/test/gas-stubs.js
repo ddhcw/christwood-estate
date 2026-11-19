@@ -98,13 +98,18 @@ function loadGas(files, opts) {
       getActiveSpreadsheet: () => ss,
       newDataValidation: ruleBuilder, newConditionalFormatRule: ruleBuilder,
       ProtectionType: { RANGE: 'RANGE' },
+      flush: () => { state.flushes = (state.flushes || 0) + 1; },
       getUi: () => { throw new Error('no ui'); }
     },
     CacheService: { getScriptCache: () => ({
       get: (k) => { const e = cacheStore[k]; return e && e.exp > state.now ? e.v : null; },
       put: (k, v, ttl) => { state.cachePuts++; cacheStore[k] = { v, exp: state.now + ttl * 1000 }; },
       remove: (k) => { delete cacheStore[k]; } }) },
+    LockService: { getScriptLock: () => ({ tryLock: () => { if (state.lockBusy) return false; state.lockHeld = true; return true; },
+      releaseLock: () => { state.lockHeld = false; } }) },
+    ContentService: { MimeType: { JSON: 'JSON' }, createTextOutput: (t) => ({ _t: t, setMimeType() { return this; }, getContent() { return this._t; } }) },
     Utilities: { formatDate: () => '2026-11-19 10:00:00',
+      computeHmacSha256Signature: (msg, key) => Array.from(crypto.createHmac('sha256', String(key)).update(String(msg), 'utf8').digest()).map((b) => (b > 127 ? b - 256 : b)),
       sleep: (ms) => { state.sleeps.push(ms); },
       DigestAlgorithm: { SHA_256: 'SHA_256' }, Charset: { UTF_8: 'UTF_8' },
       computeDigest: (alg, text) => Array.from(crypto.createHash('sha256').update(String(text), 'utf8').digest()).map((b) => (b > 127 ? b - 256 : b)) },

@@ -1,0 +1,16 @@
+**/**
+!*.js
+!appsscript.json
+
+# Not part of the Apps Script project
+docs/**
+test/**
+README.md
+.DS_Store
+.clasprc.json
+.clasp.json
+node_modules/
+.env
+.env.*
+*credentials*.json
+*service-account*.json
