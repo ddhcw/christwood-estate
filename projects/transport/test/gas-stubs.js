@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const crypto = require('crypto');
 
 function makeRange(sh, r, c, nr, nc) {
   const fmt = (what) => (...a) => { sh.meta.fmt.push([what, r, c, nr, nc, a]); return range; };
@@ -82,7 +83,9 @@ function loadGas(files, opts) {
   opts = opts || {};
   const ss = opts.ss || makeSpreadsheet();
   const cacheStore = {};
-  const state = { activeEmail: opts.email || '', logs: [], cachePuts: 0, now: 0 };
+  const propStore = Object.assign({}, opts.props || {});
+  const state = { activeEmail: opts.email || '', logs: [], cachePuts: 0, now: 0, fetchCalls: [], sleeps: [],
+    fetchHandler: opts.fetch || null, cacheStore, propStore, templates: [] };
   const sandbox = {
     console, JSON, Math, Date, Object, Array, String, Number, isFinite, parseFloat, Error,
     Logger: { log: (m) => state.logs.push(String(m)) },
@@ -98,7 +101,20 @@ function loadGas(files, opts) {
       get: (k) => { const e = cacheStore[k]; return e && e.exp > state.now ? e.v : null; },
       put: (k, v, ttl) => { state.cachePuts++; cacheStore[k] = { v, exp: state.now + ttl * 1000 }; },
       remove: (k) => { delete cacheStore[k]; } }) },
-    Utilities: { formatDate: () => '2026-11-19 10:00:00' }
+    Utilities: { formatDate: () => '2026-11-19 10:00:00',
+      sleep: (ms) => { state.sleeps.push(ms); },
+      DigestAlgorithm: { SHA_256: 'SHA_256' }, Charset: { UTF_8: 'UTF_8' },
+      computeDigest: (alg, text) => Array.from(crypto.createHash('sha256').update(String(text), 'utf8').digest()).map((b) => (b > 127 ? b - 256 : b)) },
+    PropertiesService: { getScriptProperties: () => ({
+      getProperty: (k) => (Object.prototype.hasOwnProperty.call(propStore, k) ? propStore[k] : null),
+      setProperty: (k, v) => { propStore[k] = String(v); } }) },
+    UrlFetchApp: { fetch: (url, o) => {
+      state.fetchCalls.push({ url, method: o && o.method, headers: (o && o.headers) || {}, payload: o && o.payload });
+      if (!state.fetchHandler) throw new Error('no fetch handler');
+      const r = state.fetchHandler(url, o);
+      return { getResponseCode: () => r.status, getContentText: () => (typeof r.body === 'string' ? r.body : JSON.stringify(r.body)) };
+    } },
+    HtmlService: { createTemplateFromFile: (name) => { const t = { name, evaluate: () => ({ setWidth() { return this; }, setHeight() { return this; } }) }; state.templates.push(t); return t; } }
   };
   vm.createContext(sandbox);
   files.forEach((f) => vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), sandbox, { filename: f }));

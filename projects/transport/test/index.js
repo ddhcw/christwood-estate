@@ -4,3 +4,4 @@
 // scan the folder. Either way the suites below run.
 require('./gps-setup.test.js');
 require('./gps-auth.test.js');
+require('./gps-endpoints.test.js');

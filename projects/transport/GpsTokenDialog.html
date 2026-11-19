@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { --ink:#14213a; --bg:#ffffff; --line:#c9d2e0; --blue:#1e3a5f; --warnbg:#fcf0d6; --warnfg:#6b4a00; }
+    body { margin:0; padding:16px; background:var(--bg); color:var(--ink);
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:15px; line-height:1.4; }
+    h2 { font-size:17px; margin:0 0 6px; }
+    .note { background:var(--warnbg); color:var(--warnfg); border-radius:8px; padding:10px 12px; margin:10px 0; }
+    #qr { display:flex; justify-content:center; margin:12px 0; min-height:200px; }
+    #qrfail { display:none; }
+    textarea { width:100%; box-sizing:border-box; min-height:84px; font:13px/1.3 ui-monospace,Menlo,Consolas,monospace;
+      color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:8px; }
+    button { min-height:48px; width:100%; margin-top:8px; border:0; border-radius:10px; background:var(--blue);
+      color:#fff; font-size:16px; font-weight:600; cursor:pointer; }
+    button.ghost { background:#e9edf4; color:var(--ink); }
+  </style>
+</head>
+<body>
+  <h2>Device <?!= deviceId.replace(/[<>&]/g, '') ?> (ends <?!= last4.replace(/[<>&]/g, '') ?>)</h2>
+  <div class="note"><b>This is the only time the token is shown.</b> Scan the code in Traccar Client or paste the link. It is not saved anywhere. Closing this window loses it; reissue to get a new one (the old one stops working).</div>
+  <? if (warning) { ?><div class="note"><?!= String(warning).replace(/[<>&]/g, '') ?></div><? } ?>
+  <div id="qr" aria-label="QR code for the device link"></div>
+  <p id="qrfail" class="note">The QR code could not be drawn. Copy the link below instead.</p>
+  <textarea id="u" readonly aria-label="Device link"></textarea>
+  <button type="button" id="copy">Copy link</button>
+  <button type="button" class="ghost" onclick="google.script.host.close()">Close and forget it</button>
+
+  <script>
+    var URL_ONCE = <?!= JSON.stringify(String(url)).replace(/</g, '\\u003c') ?>;
+    document.getElementById('u').value = URL_ONCE;
+    document.getElementById('copy').onclick = function () {
+      var t = document.getElementById('u'); t.select();
+      try { document.execCommand('copy'); this.textContent = 'Copied'; } catch (e) { this.textContent = 'Press and hold the link to copy'; }
+    };
+    function drawQr() {
+      try { new QRCode(document.getElementById('qr'), { text: URL_ONCE, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M }); }
+      catch (e) { document.getElementById('qrfail').style.display = 'block'; }
+    }
+  </script>
+  <!-- Drawn in this browser; the link is never sent to a QR service. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" onload="drawQr()"
+    onerror="document.getElementById('qrfail').style.display='block'"></script>
+</body>
+</html>

@@ -59,3 +59,12 @@ confirmed identical to the local working copy. Per shipping standards §2:
   `Attendance.js`, `AttendanceForm.html`, roster views in `Script.html`) are a
   separate, unrelated lookup and were untouched — do not conflate the two if a
   future ticket asks about "route numbers" again.
+
+## Live buses (GPS) — G-B
+
+- Page: `<signed-in deployment>/exec?page=gps` (`GpsLive.html`). Shows data only to a signed-in person on `GPS_Access` (RFC-GPS-5); the anonymous deployment shows the sign-in message.
+- Script Properties (never in files): `GPS_WORKER_URL` (https origin), `GPS_READ_SECRET`, `GPS_CONFIG_SECRET`. `GPS_CONFIG_LAST_PUSH` is bookkeeping only.
+- Menu: Fleet > Push GPS config / Issue / reissue device token / Revoke device token (managers only). The token link and QR show once; only `token_last4` and `token_issued_at` are stored.
+- `gps_enabled = Yes` in Settings opens the views. Live data is cached 20 s; if the Worker is down the last copy shows under a red banner.
+- `GPS_Access_Log` rows: one per viewer per view per 5 minutes (auto-refresh is not logged again).
+- Tests: `cd projects/transport && node --test test/`. Not verified here: anything needing the Apps Script runtime, the live Worker, or a browser.
