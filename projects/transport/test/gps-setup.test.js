@@ -14,7 +14,7 @@ test('PRD 7.2 headers are exactly as specified', () => {
   assert.deepStrictEqual(h.Transport_Stops, ['stop_id', 'stop_name', 'landmark', 'lat', 'lon', 'radius_m', 'kind', 'coord_source', 'verified_by', 'verified_on', 'active', 'edited_by', 'edited_at']);
   assert.deepStrictEqual(h.Trip_Stops, ['trip_code', 'sequence', 'stop_id', 'scheduled_time']);
   assert.deepStrictEqual(h.Student_Trip_Stops, ['admission_no', 'session', 'trip_code', 'stop_id', 'notify', 'active', 'gcm_reachable', 'edited_by', 'edited_at']);
-  assert.deepStrictEqual(h.Parent_Notify_Log, ['dedupe_key', 'event_id', 'created_at', 'service_date', 'trip_run_id', 'session', 'event_type', 'admission_no', 'stop_id', 'eta_minutes', 'mode', 'status', 'suppressed_reason', 'gcm_queued_at', 'gcm_status', 'gcm_result', 'gcm_sent_at', 'latency_s', 'actual_crossing_at', 'eta_error_min']);
+  assert.deepStrictEqual(h.Parent_Notify_Log, ['dedupe_key', 'event_id', 'created_at', 'service_date', 'trip_run_id', 'session', 'event_type', 'admission_no', 'stop_id', 'eta_minutes', 'mode', 'status', 'suppressed_reason', 'gcm_queued_at', 'gcm_status', 'gcm_result', 'gcm_sent_at', 'latency_s', 'actual_crossing_at', 'eta_error_min', 'expires_at']);
   assert.deepStrictEqual(h.Notify_Strings, ['key', 'en', 'ta', 'ta-Latn', 'notes']);
   assert.deepStrictEqual(h.GPS_Access, ['email', 'name', 'role', 'active', 'added_by', 'added_on', 'notes']);
   assert.ok(h.GPS_Daily.slice(-6).join() === 'trip_code,session,events_fired,events_suppressed,median_eta_error_min,median_gcm_latency_s');
@@ -26,11 +26,12 @@ test('settings defaults: every PRD key present, named defaults honoured, keys un
   const g = G();
   const d = J(g.run('GPS_DEFAULT_SETTINGS'));
   const m = {}; d.forEach((x) => { m[x[0]] = x[1]; });
-  assert.strictEqual(d.length, 21);
-  assert.strictEqual(Object.keys(m).length, 21);
+  assert.strictEqual(d.length, 22);
+  assert.strictEqual(Object.keys(m).length, 22);
   assert.deepStrictEqual(
     ['gps_window_grace_min', 'gps_stale_minutes', 'gps_ping_interval_s', 'gps_retention_days', 'gps_purge_enabled', 'parent_notify_mode', 'parent_notify_channel', 'parent_notify_types', 'gate_l_passed', 'gcm_project_id', 'notify_eta_minutes', 'notify_max_fix_age_s', 'notify_max_accuracy_m', 'eta_road_factor', 'eta_speed_window_min', 'gps_backfill_bucket', 'gcm_feed_daily_cap'].map((k) => m[k]),
     ['15', '5', '30', '90', 'No', 'shadow_local', 'gcm', 'bus_reached_school,bus_left_school', 'No', 'cw-bus-notify', '5', '90', '50', '1.3', '5', '400', '300']);
+  assert.strictEqual(m.gcm_send_window, '07:00-19:00');
   assert.strictEqual(m.gps_enabled, 'No');
   assert.strictEqual(m.gps_alerts_enabled, 'No');
 });
@@ -80,7 +81,7 @@ test('setupGpsTabs_ creates all ten tabs with headers, frozen row, rules, protec
   const st = ss.sheets.Settings.data;
   assert.strictEqual(st[2][1], '9');
   assert.strictEqual(st.filter((r) => r[0] === 'gps_stale_minutes').length, 1);
-  assert.strictEqual(st.length, 3 + 20);
+  assert.strictEqual(st.length, 3 + 21);
 });
 
 test('running setup twice changes nothing, including entered data', () => {
@@ -110,7 +111,7 @@ test('setup works when there is no Settings tab yet', () => {
   const ss = makeSpreadsheet();
   const g = loadGas(['GpsSetup.js'], { ss });
   g.run('setupGpsTabs_(SpreadsheetApp.getActiveSpreadsheet())');
-  assert.strictEqual(ss.sheets.Settings.data.length, 1 + 21);
+  assert.strictEqual(ss.sheets.Settings.data.length, 1 + 22);
 });
 
 // ---- validation (R26-R29) --------------------------------------------------
