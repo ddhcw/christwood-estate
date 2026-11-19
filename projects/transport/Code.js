@@ -4,6 +4,15 @@
 
 /** Serve the pastel web app. ?v=V003 (from a bus's QR sticker) pre-selects that vehicle. */
 function doGet(e) {
+  // ?page=gps serves the Live buses shell (GpsLive.html). The page holds no data:
+  // every server function it calls refuses unless a listed person is signed in (R14).
+  if (e && e.parameter && e.parameter.page === 'gps') {
+    return HtmlService.createTemplateFromFile('GpsLive')
+      .evaluate()
+      .setTitle('Live buses')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setFaviconUrl('https://ssl.gstatic.com/docs/script/images/favicon.png');
+  }
   const t = HtmlService.createTemplateFromFile('Index');
   t.presetVehicle = (e && e.parameter && e.parameter.v) ? String(e.parameter.v) : '';
   return t
@@ -25,6 +34,13 @@ function onOpen() {
     .addItem('1) Set up workbook', 'setupWorkbook')
     .addItem('2) Set / change admin PIN', 'setAdminPin')
     .addSeparator()
+    .addItem('Validate GPS setup', 'menuValidateGps')
+    .addItem('Push GPS config', 'menuPushGpsConfig')
+    .addItem('Issue / reissue device token', 'menuIssueGpsToken')
+    .addItem('Revoke device token', 'menuRevokeGpsToken')
+    .addItem('Check GPS now', 'menuCheckGpsNow')
+    .addItem('Pull GPS summary for a date', 'menuPullGpsDaily')
+    .addItem('Turn on GPS watchdog', 'installGpsTriggers')
     .addItem('Rebuild dashboard now', 'rebuildAnalytics')
     .addItem('Fuel report — last month', 'menuFuelReportLastMonth')
     .addItem('Run morning checks now', 'morningChecks')

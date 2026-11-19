@@ -174,6 +174,7 @@ function rebuildAnalytics() {
   const result = computeSummaryRows_();
   writeSummary_(ss, result.rows);
   buildDashboard_(ss, result);
+  try { gpsNightlyPull_(); } catch (e) { Logger.log('GPS daily pull skipped: ' + e); } // R22: must never break the dashboard
   SpreadsheetApp.getActive().toast('Dashboard updated.', 'Fleet', 4);
 }
 

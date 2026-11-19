@@ -2,3 +2,9 @@
 !*.js
 !*.html
 !appsscript.json
+
+# Not part of the Apps Script project
+gps-worker/**
+docs/**
+test/**
+tickets/**

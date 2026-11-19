@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live buses</title>
+  <!-- Leaflet 1.9.4 from cdnjs; OSM tiles need no key. System fonts only. -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <style>
+    :root {
+      --ink:#14213a; --muted:#44506a; --bg:#f4f6fa; --card:#ffffff; --line:#c9d2e0;
+      --blue:#1e3a5f; --gold:#d4a853;
+      --err-bg:#fad9d9; --err-fg:#7a1f1f;
+      --pen-bg:#fcf0d6; --pen-fg:#6b4a00;
+      --stale-bg:#e4e7ea; --stale-fg:#3d4650;
+      --live-bg:#ddf3e4; --live-fg:#1d5a33;
+    }
+    * { box-sizing:border-box; }
+    html, body { margin:0; padding:0; background:var(--bg); color:var(--ink);
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:16px; line-height:1.4; }
+    .wrap { max-width:640px; margin:0 auto; padding:0 16px 48px; overflow-x:hidden; }
+    header { position:sticky; top:0; z-index:500; background:var(--bg); padding:12px 0 8px; display:flex; gap:12px; align-items:center; }
+    header .t { flex:1; min-width:0; }
+    h1 { font-size:20px; margin:0; color:var(--blue); }
+    #asof { font-size:14px; color:var(--muted); }
+    button { font:inherit; min-height:48px; min-width:48px; padding:0 16px; border:0; border-radius:10px;
+      background:var(--blue); color:#fff; font-weight:600; cursor:pointer; }
+    button.ghost { background:#e3e8f1; color:var(--ink); }
+    button:disabled { opacity:.6; cursor:default; }
+    #banner { display:none; border-radius:10px; padding:10px 12px; margin:8px 0; font-weight:600; }
+    #banner.red { background:var(--err-bg); color:var(--err-fg); }
+    #banner.amber { background:var(--pen-bg); color:var(--pen-fg); }
+    #banner.grey { background:var(--stale-bg); color:var(--stale-fg); }
+    #progress { margin:16px 0; }
+    #progress .bar { height:6px; border-radius:3px; background:var(--line); overflow:hidden; }
+    #progress .bar i { display:block; height:100%; width:40%; background:var(--blue); animation:slide 1.2s infinite ease-in-out; }
+    @keyframes slide { 0% { margin-left:-40%; } 100% { margin-left:100%; } }
+    #msg { display:none; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px 16px; margin:16px 0; font-size:18px; }
+    #map { height:280px; border-radius:12px; border:1px solid var(--line); margin:8px 0; background:#dfe5ee; }
+    #mapnote { display:none; font-size:14px; color:var(--muted); }
+    ul { list-style:none; padding:0; margin:12px 0; }
+    li.bus { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:10px; }
+    .row1 { display:flex; align-items:center; gap:10px; justify-content:space-between; }
+    .vid { font-size:18px; font-weight:700; }
+    .chip { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:4px 12px; font-weight:700; font-size:15px; min-height:32px; }
+    .chip.Error { background:var(--err-bg); color:var(--err-fg); }
+    .chip.Pending { background:var(--pen-bg); color:var(--pen-fg); }
+    .chip.Stale, .chip.Off-duty { background:var(--stale-bg); color:var(--stale-fg); }
+    .chip.Live { background:var(--live-bg); color:var(--live-fg); }
+    .line { margin-top:6px; font-size:15px; }
+    .why { color:var(--muted); font-size:14px; }
+    li.bus button { margin-top:8px; width:100%; }
+    #trackbox { display:none; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin:12px 0; }
+    .legend { font-size:14px; color:var(--muted); }
+    .mk { background:#fff; border:2px solid var(--blue); border-radius:8px; padding:2px 6px; font-weight:700; font-size:13px; white-space:nowrap; color:var(--ink); }
+    .mk.Error { border-color:var(--err-fg); } .mk.Stale { border-color:var(--stale-fg); border-style:dashed; }
+    .mk.Pending { border-color:var(--pen-fg); } .mk.Live { border-color:var(--live-fg); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="t">
+        <h1>Live buses</h1>
+        <div id="asof" aria-live="polite">Data as of --:--</div>
+      </div>
+      <button id="refresh" type="button" aria-label="Refresh now">Refresh</button>
+    </header>
+
+    <div id="banner" role="status"></div>
+
+    <div id="progress" aria-live="polite">
+      <div id="progtext">Loading buses...</div>
+      <div class="bar"><i></i></div>
+    </div>
+
+    <div id="msg" role="alert"></div>
+
+    <div id="app" style="display:none">
+      <div id="map" aria-label="Map of bus positions"></div>
+      <div id="mapnote">The map could not load. The list below still shows every bus.</div>
+      <div id="trackbox" aria-live="polite">
+        <b id="tracktitle">Today's track</b>
+        <div id="tracksum" class="line"></div>
+        <div class="legend">Solid line: signal. Dashed line: no signal for more than 2 minutes. Circles: stops.</div>
+        <button type="button" class="ghost" id="trackclose" style="margin-top:8px;width:100%">Close track</button>
+      </div>
+      <ul id="list" aria-label="Buses, most urgent first"></ul>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script>
+  (function () {
+    var REFRESH_MS = 30000;
+    var $ = function (id) { return document.getElementById(id); };
+    var map = null, busLayer = null, trackLayer = null;
+    var inflight = false, lastLoad = 0, timer = null, firstFit = true, trackVehicle = '';
+
+    function el(tag, cls, text) {
+      var e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (text !== undefined && text !== null) e.textContent = text;
+      return e;
+    }
+    function setBanner(b) {
+      var d = $('banner');
+      if (!b) { d.style.display = 'none'; d.textContent = ''; d.className = ''; return; }
+      d.className = b.level; d.textContent = b.text; d.style.display = 'block';
+    }
+    function showMessage(text) {
+      $('progress').style.display = 'none';
+      $('app').style.display = 'none';
+      var m = $('msg'); m.textContent = text; m.style.display = 'block';
+      $('asof').textContent = '';
+      setBanner(null);
+    }
+    function setAsOf(text) { $('asof').textContent = 'Data as of ' + (text || '--:--'); }
+
+    function initMap() {
+      if (map || !window.L) { if (!window.L) $('mapnote').style.display = 'block'; return; }
+      map = L.map('map', { zoomControl: true }).setView([11.0, 78.0], 7);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+      busLayer = L.layerGroup().addTo(map);
+      trackLayer = L.layerGroup().addTo(map);
+    }
+
+    function markerFor(b) {
+      var e = el('div', 'mk ' + b.state.replace(' ', '-'), (b.icon || '') + ' ' + b.vehicle_id);
+      return L.marker([b.lat, b.lon], { icon: L.divIcon({ html: e, className: '', iconSize: null }) });
+    }
+
+    function renderBuses(res) {
+      var list = $('list');
+      list.textContent = '';
+      var pts = [];
+      if (busLayer) busLayer.clearLayers();
+      if (!res.buses.length) {
+        var none = el('li', 'bus'); none.appendChild(el('div', 'line', 'No buses are reporting yet.')); list.appendChild(none);
+      }
+      res.buses.forEach(function (b) {
+        var li = el('li', 'bus');
+        var r1 = el('div', 'row1');
+        r1.appendChild(el('span', 'vid', b.vehicle_id));
+        r1.appendChild(el('span', 'chip ' + b.state.replace(' ', '-'), (b.icon || '') + ' ' + b.state));
+        li.appendChild(r1);
+        if (b.status_text) li.appendChild(el('div', 'why', b.status_text));
+        var seen = b.last_seen ? 'Last seen ' + b.last_seen + (b.late ? ' (late upload)' : '') : 'No location yet';
+        var bits = [seen];
+        if (b.speed_kmh !== null) bits.push(Math.round(b.speed_kmh) + ' km/h');
+        if (b.battery_pct !== null) bits.push('battery ' + Math.round(b.battery_pct) + '%');
+        li.appendChild(el('div', 'line', bits.join('  |  ')));
+        var trip = b.trip_code ? 'Trip ' + b.trip_code + (b.session ? ' (' + b.session.replace(/_/g, ' ').toLowerCase() + ')' : '') : 'No trip scheduled now';
+        li.appendChild(el('div', 'line', trip));
+        if (b.next_stop) li.appendChild(el('div', 'line', 'Next stop: ' + b.next_stop.stop_name + ', about ' + b.next_stop.eta_min + ' min'));
+        var tb = el('button', 'ghost', "Today's track");
+        tb.type = 'button';
+        tb.addEventListener('click', function () { loadTrack(b.vehicle_id); });
+        li.appendChild(tb);
+        list.appendChild(li);
+        if (map && b.lat !== null && b.lon !== null) { markerFor(b).addTo(busLayer); pts.push([b.lat, b.lon]); }
+      });
+      if (map && pts.length && firstFit && !trackVehicle) { map.fitBounds(pts, { padding: [30, 30], maxZoom: 15 }); firstFit = false; }
+    }
+
+    function refresh() {
+      if (inflight) return;
+      inflight = true;
+      $('refresh').disabled = true;
+      google.script.run
+        .withSuccessHandler(function (res) {
+          inflight = false; $('refresh').disabled = false; lastLoad = Date.now();
+          if (!res || res.ok !== true) {
+            var e = res && res.error ? String(res.error) : '';
+            showMessage(/switched off|record this view|not set up/i.test(e) ? e : 'Sign in with your school account.');
+            return;
+          }
+          $('progress').style.display = 'none'; $('msg').style.display = 'none'; $('app').style.display = 'block';
+          initMap();
+          if (map) setTimeout(function () { map.invalidateSize(); }, 50);
+          setAsOf(res.data_as_of_text);
+          setBanner(res.banner);
+          renderBuses(res);
+        })
+        .withFailureHandler(function () {
+          inflight = false; $('refresh').disabled = false;
+          if ($('app').style.display === 'block') {
+            setBanner({ level: 'red', text: 'Could not reach the server. The list may be out of date.' });
+          } else {
+            showMessage('Could not load the buses. Check your connection and tap Refresh.');
+          }
+        })
+        .getGpsLive();
+    }
+
+    function loadTrack(vid) {
+      trackVehicle = vid;
+      var box = $('trackbox'); box.style.display = 'block';
+      $('tracktitle').textContent = "Today's track: " + vid;
+      $('tracksum').textContent = 'Loading track...';
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (!res || res.ok !== true) { $('tracksum').textContent = 'The track is not available.'; return; }
+          if (trackLayer) trackLayer.clearLayers();
+          var all = [], dashed = 0;
+          (res.segments || []).forEach(function (s) {
+            if (s.dashed) dashed++;
+            all = all.concat(s.pts);
+            if (trackLayer) L.polyline(s.pts, { color: '#1e3a5f', weight: 4, dashArray: s.dashed ? '4 10' : null }).addTo(trackLayer);
+          });
+          (res.stops || []).forEach(function (s) {
+            if (trackLayer && s.radius_m) L.circle([s.lat, s.lon], { radius: s.radius_m, color: '#6b4a00', weight: 2, fillOpacity: .15 }).addTo(trackLayer)
+              .bindTooltip(s.stop_name);
+          });
+          $('tracksum').textContent = (res.segments && res.segments.length ? all.length + ' points, ' + dashed + ' gap' + (dashed === 1 ? '' : 's') + '. ' : 'No points recorded today. ') +
+            (res.down ? 'Tracking service unreachable; showing the last copy' + (res.data_as_of_text ? ' as of ' + res.data_as_of_text : '') + '.' : '');
+          if (map && all.length) map.fitBounds(all, { padding: [30, 30] });
+          box.scrollIntoView({ block: 'nearest' });
+        })
+        .withFailureHandler(function () { $('tracksum').textContent = 'Could not load the track.'; })
+        .getGpsTrack(vid, '');
+    }
+
+    $('refresh').addEventListener('click', refresh);
+    $('trackclose').addEventListener('click', function () {
+      trackVehicle = ''; $('trackbox').style.display = 'none'; if (trackLayer) trackLayer.clearLayers();
+    });
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden && Date.now() - lastLoad >= REFRESH_MS) refresh();
+    });
+    timer = setInterval(function () { if (!document.hidden) refresh(); }, REFRESH_MS);
+    refresh();
+  })();
+  </script>
+</body>
+</html>

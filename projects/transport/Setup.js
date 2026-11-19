@@ -191,6 +191,9 @@ function setupWorkbook() {
   // 3b) Fill in new columns for any data already in the sheet (safe to repeat).
   migrateData_(ss);
 
+  // 3c) GPS tabs and Settings keys (GpsSetup.js). Adds only; existing tabs are untouched.
+  setupGpsTabs_(ss);
+
   // 4) Tidy the masters/logs visually.
   // Attendance_Log is deliberately absent: it is the tab that grows fastest, and
   // autoResizeColumn over tens of thousands of rows on every setup run would

@@ -77,6 +77,48 @@ Columns are listed in the order and spelling of `HEADERS` in `Setup.js`. The cod
 | `weeklyDigest` | Mondays, hour 08 | owner not verifiable from code | Fleet menu: Send weekly digest now |
 | `monthlyReport` | 1st of each month, hour 06 | owner not verifiable from code | Fleet menu: Send monthly report now |
 
+- Fuel, trip, attendance and maintenance entries are all separate sheets with
+  their own shapes. A change described as applying to "all entered data" must
+  name the sheets it touches — do not assume one shared schema.
+- `FixEntries.html` exists to repair bad rows. If a change can create bad rows,
+  it needs a matching repair path, per shipping standards §6 (every automated
+  job needs a manual on-demand twin).
+- Duplicate fuel detection (`duplicateFuelGroups_()`) excludes voided rows
+  (`isVoided_(r)`), matching the convention already used by `findDuplicate_`
+  elsewhere: a voided row is treated as already human-resolved, so re-flagging
+  it would be misleading. This is read-only — it flags, it never merges or
+  deletes. If one side of a flagged pair later gets voided via Fix Entries,
+  the cluster disappears from the dashboard on the next load; that's expected
+  self-resolution, not a bug.
+- The fuel report PDF (`FuelReport.js`) has **no route-number column**
+  (removed by TICKET-0006, which supersedes TICKET-0002). This was deliberate,
+  not a regression: the `routeOf` lookup, the `route_no` field on report rows,
+  the `'Route No'` header, and its entry in the `widths` array were all removed
+  together so the table stays aligned. Route numbers on vehicles, drivers,
+  roster and attendance (`VehicleAdmin.html`, `DriverAdmin.html`,
+  `Attendance.js`, `AttendanceForm.html`, roster views in `Script.html`) are a
+  separate, unrelated lookup and were untouched — do not conflate the two if a
+  future ticket asks about "route numbers" again.
+
+## Live buses (GPS) — G-B
+
+- Page: `<signed-in deployment>/exec?page=gps` (`GpsLive.html`). Shows data only to a signed-in person on `GPS_Access` (RFC-GPS-5); the anonymous deployment shows the sign-in message.
+- Script Properties (never in files): `GPS_WORKER_URL` (https origin), `GPS_READ_SECRET`, `GPS_CONFIG_SECRET`. `GPS_CONFIG_LAST_PUSH` is bookkeeping only.
+- Menu: Fleet > Push GPS config / Issue / reissue device token / Revoke device token (managers only). The token link and QR show once; only `token_last4` and `token_issued_at` are stored.
+- `gps_enabled = Yes` in Settings opens the views. Live data is cached 20 s; if the Worker is down the last copy shows under a red banner.
+- `GPS_Access_Log` rows: one per viewer per view per 5 minutes (auto-refresh is not logged again).
+- Tests: `cd projects/transport && node --test test/`. Not verified here: anything needing the Apps Script runtime, the live Worker, or a browser.
+
+## GPS ops — G-C
+
+- New files: `GpsWatchdog.js` (15-minute watchdog, Ops Alerts with email fallback, one alert and one recovery per episode), `GpsDaily.js` (nightly and manual upsert of `GPS_Daily` on `day_key`; called from `rebuildAnalytics` inside a try/catch).
+- Menu: Fleet > Check GPS now / Pull GPS summary for a date / Turn on GPS watchdog (managers only). The trigger is installed only by that menu item.
+- Script Properties added: `OPS_ALERTS_WEBHOOK` (names only here; values never in files). `GPS_WATCHDOG_STATE` is bookkeeping.
+- Settings read: `gps_alerts_enabled`, `gps_enabled`, `gps_service_days`, `gps_window_grace_min`, `alert_email`, and `feeder_heartbeat` (optional; absent until the feeder exists).
+- The deploying account must re-authorise once for the `script.external_request` scope.
+- Full ops guide: `docs/OPS-GPS.md`. Contact and Worker URL are `TODO(human)` there.
+- Not verified without the Apps Script runtime: the real trigger, Chat webhook, mail, and `UrlFetchApp` behaviour.
+
 `installTriggers` creates the five triggers above. It is not scheduled itself. It runs from the Fleet menu item "Turn on automatic updates". It first deletes any existing copies of those five, so running it again is safe. `checkDocumentExpiry` is an old name for `morningChecks`, kept so that any older trigger still works. It is not a trigger in the code.
 
 ## Config and secrets
