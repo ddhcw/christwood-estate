@@ -129,6 +129,17 @@ Columns are listed in the order and spelling of `HEADERS` in `Setup.js`. The cod
 - Row status follows `parent_notify_mode`: `shadow_local` gives `local_only`; `shadow_gcm` and `live` give `pending_feed` only for types in `parent_notify_types` (stop-level types also need `gate_l_passed` = Yes; `live` also needs the trip in `parent_notify_trips`), else `local_only` with the reason in `suppressed_reason`. Outside `gcm_send_window`, or past `expires_at`, the row is `suppressed`. `off` drops the batch.
 - Deploying: the web app must be redeployed as a new version for `doPost` to exist. See RFC-GPS-2.
 
+## Stop import and capture — G-F
+
+- Page: `<signed-in deployment>/exec?page=gps-stops` (`GpsStops.html`, `GpsStops.js`). **Manage role only** (R41): every server function (`getGpsStops`, `gpsMarkStop`, `gpsTapStop`, `getGpsDwell`, `gpsSaveDwellDraft`, `gpsImportStops`) starts with `gpsRequire_('manage')`. Stop coordinates are effectively home addresses (PRD section 9). It does not depend on `gps_enabled`, so stops can be captured before the live view is opened.
+- Import (R30 job 1): reads the school stop sheet named by Settings `stop_import_sheet_id` (blank = off, `TODO(human)`; optional `stop_import_sheet_tab`, blank = first tab). **Q12 is open**: the school's headers are unknown, so the new `Stop_Import_Map` tab maps each logical field (`stop_name`, `landmark`, `route_no`, `session`, `sequence`, `scheduled_time`, `admission_no`, `student_stop`) to a real header (`source_header`, then `aliases` separated by `|`). It is seeded blank and never rewritten by setup. Fill it from the real headers once Q12 is answered.
+- Rules: stop identity is the normalised stop name; existing rows are never changed (so verified coordinates survive); new stops get blank lat, lon, coord_source and verified_on (the engine skips them); admission numbers become `C0nnnnn` or are reported and not written; student rows get `notify = No` until a manager turns them on; trips are found by route number plus session on `Transport_Trips`. `gpsImportStops(false)` (or anything but `true`) is a dry run and writes nothing to the stop tabs.
+- Mark this stop: position is read on the server from the Worker `/v1/latest` for the chosen bus. Refused if the fix is over 60 s old, accuracy is worse than 50 m, or accuracy is not reported. Saves 6 d.p., `driven`, signed-in email, today. A verified stop needs an explicit overwrite and the old values go in the log row.
+- Map tap: `map_tap`, within 30 km of the `kind = school` row (refused if the school has no coordinates), 0,0 and out-of-range refused.
+- Dwell suggestions: stand-still of 20 s or more within 30 m, not within 30 m of an existing stop. Read-only. A saved suggestion is a draft: chosen `coord_source` (`map_tap` or `driven`) but `verified_by` and `verified_on` stay blank.
+- Every save writes one `GPS_Access_Log` row first (`stop_save:`, `stop_draft:` or `stop_import:` plus values); the save is refused if that row cannot be written.
+- Tests: `cd projects/transport && node --test test/`. Not verified here: the Apps Script runtime, the real Worker, a browser, or the school sheet.
+
 ## Config and secrets
 
 Secrets live in Script Properties, never in source. The Fleet menu sets them.

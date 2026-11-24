@@ -7,3 +7,4 @@ require('./gps-auth.test.js');
 require('./gps-endpoints.test.js');
 require('./gps-watchdog.test.js');
 require('./gps-events.test.js');
+require('./gps-stops.test.js');
