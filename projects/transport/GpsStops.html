@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bus stops</title>
+  <!-- Leaflet 1.9.4 from cdnjs; OSM tiles need no key. System fonts only. -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <style>
+    :root {
+      --ink:#14213a; --muted:#44506a; --bg:#f4f6fa; --card:#ffffff; --line:#c9d2e0;
+      --blue:#1e3a5f; --gold:#d4a853;
+      --err-bg:#fad9d9; --err-fg:#7a1f1f; --pen-bg:#fcf0d6; --pen-fg:#6b4a00;
+      --stale-bg:#e4e7ea; --stale-fg:#3d4650; --live-bg:#ddf3e4; --live-fg:#1d5a33;
+    }
+    * { box-sizing:border-box; }
+    html, body { margin:0; padding:0; background:var(--bg); color:var(--ink);
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:16px; line-height:1.4; }
+    .wrap { max-width:640px; margin:0 auto; padding:0 16px 48px; overflow-x:hidden; }
+    header { position:sticky; top:0; z-index:500; background:var(--bg); padding:12px 0 8px; display:flex; gap:12px; align-items:center; }
+    header .t { flex:1; min-width:0; }
+    h1 { font-size:20px; margin:0; color:var(--blue); }
+    h2 { font-size:18px; margin:0 0 8px; color:var(--blue); }
+    #asof { font-size:14px; color:var(--muted); }
+    button { font:inherit; min-height:44px; min-width:44px; padding:0 16px; border:0; border-radius:10px;
+      background:var(--blue); color:#fff; font-weight:600; cursor:pointer; }
+    button.ghost { background:#e3e8f1; color:var(--ink); }
+    button.big { min-height:48px; width:100%; font-size:18px; margin-top:8px; }
+    button:disabled { opacity:.6; cursor:default; }
+    select, input { font:inherit; min-height:44px; width:100%; padding:0 10px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); }
+    #banner { display:none; border-radius:10px; padding:10px 12px; margin:8px 0; font-weight:600; }
+    #banner.red { background:var(--err-bg); color:var(--err-fg); }
+    #banner.green { background:var(--live-bg); color:var(--live-fg); }
+    #progress { margin:16px 0; }
+    #progress .bar { height:6px; border-radius:3px; background:var(--line); overflow:hidden; }
+    #progress .bar i { display:block; height:100%; width:40%; background:var(--blue); animation:slide 1.2s infinite ease-in-out; }
+    @keyframes slide { 0% { margin-left:-40%; } 100% { margin-left:100%; } }
+    #msg { display:none; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px 16px; margin:16px 0; font-size:18px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin:12px 0; }
+    ul { list-style:none; padding:0; margin:0; }
+    li.stop, li.sug { border-top:1px solid var(--line); padding:12px 0; }
+    li.stop:first-child, li.sug:first-child { border-top:0; }
+    .row1 { display:flex; align-items:center; gap:10px; justify-content:space-between; flex-wrap:wrap; }
+    .nm { font-size:17px; font-weight:700; }
+    .badge { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:4px 12px; font-weight:700; font-size:15px; min-height:32px; }
+    .badge.unver { background:var(--err-bg); color:var(--err-fg); }
+    .badge.ver { background:var(--live-bg); color:var(--live-fg); }
+    .why { color:var(--muted); font-size:14px; }
+    #map { height:300px; border-radius:12px; border:1px solid var(--line); margin:8px 0; background:#dfe5ee; }
+    #picker { display:none; }
+    .rep { font-size:15px; margin-top:8px; }
+    .rep li { padding:4px 0; border:0; }
+    label { display:block; font-weight:600; margin:8px 0 4px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="t">
+        <h1>Bus stops</h1>
+        <div id="asof" aria-live="polite">Data as of --:--</div>
+      </div>
+      <button id="refresh" type="button" aria-label="Refresh now">Refresh</button>
+    </header>
+    <div id="banner" role="status"></div>
+    <div id="progress" aria-live="polite"><div>Loading stops...</div><div class="bar"><i></i></div></div>
+    <div id="msg" role="alert"></div>
+
+    <div id="app" style="display:none">
+      <div class="card">
+        <h2>Bus phone</h2>
+        <label for="veh">Which bus are you riding?</label>
+        <select id="veh"></select>
+        <div class="why">"Mark this stop" saves the last position this bus phone sent. It must be under 60 seconds old and accurate to 50 m.</div>
+        <div id="posinfo" class="why" aria-live="polite"></div>
+      </div>
+
+      <div id="picker" class="card">
+        <h2 id="pktitle">Pick a spot</h2>
+        <div class="why">Tap the map where the stop is, then save.</div>
+        <div id="map" aria-label="Map for picking a stop position"></div>
+        <div id="mapnote" class="why" style="display:none">The map could not load.</div>
+        <div id="pkpos" class="why">Nothing picked yet.</div>
+        <button id="pksave" class="big" type="button" disabled>Save this spot</button>
+        <button id="pkcancel" class="ghost big" type="button">Cancel</button>
+      </div>
+
+      <div class="card">
+        <h2>Stops</h2>
+        <ul id="list" aria-label="Stops"></ul>
+      </div>
+
+      <div class="card">
+        <h2>Suggestions from today's track</h2>
+        <div class="why">Places where the selected bus stood still for 20 seconds or more. Nothing is saved until you choose. A saved suggestion is a draft: the stop stays unverified until you Mark it or tap it on the map.</div>
+        <button id="dwellgo" class="ghost big" type="button">Find stops from the track</button>
+        <div id="dwellinfo" class="why" aria-live="polite"></div>
+        <ul id="dwell"></ul>
+      </div>
+
+      <div class="card">
+        <h2>Import from the school sheet</h2>
+        <div class="why">Check first (nothing is written), then import. Existing stops are never changed.</div>
+        <button id="impdry" class="ghost big" type="button">Check import (dry run)</button>
+        <button id="impgo" class="big" type="button" disabled>Run import</button>
+        <div id="impres" class="rep" aria-live="polite"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var state = { stops: [], school: null }, map = null, pin = null, picking = null, picked = null;
+    var busy = false;
+
+    function el(tag, cls, text) {
+      var e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (text !== undefined && text !== null) e.textContent = text;
+      return e;
+    }
+    function setBanner(level, text) {
+      var d = $('banner');
+      if (!text) { d.style.display = 'none'; d.textContent = ''; d.className = ''; return; }
+      d.className = level; d.textContent = text; d.style.display = 'block';
+    }
+    function showMessage(text) {
+      $('progress').style.display = 'none'; $('app').style.display = 'none';
+      var m = $('msg'); m.textContent = text; m.style.display = 'block';
+    }
+    function fail() { busy = false; setBanner('red', 'Could not reach the server. Nothing was saved. Try again.'); }
+    function vehicle() { return $('veh').value; }
+
+    // Save with the overwrite handshake: the server says needs_overwrite, the person confirms.
+    function save(fnName, args, done) {
+      if (busy) return;
+      busy = true;
+      function run(overwrite) {
+        var call = google.script.run
+          .withSuccessHandler(function (res) {
+            if (res && res.needs_overwrite && !overwrite) {
+              busy = false;
+              if (window.confirm(res.error + ' Replace it? The old position is kept in the log.')) { busy = true; run(true); }
+              return;
+            }
+            busy = false;
+            if (!res || res.ok !== true) { setBanner('red', (res && res.error) || 'Not saved.'); return; }
+            done(res);
+          })
+          .withFailureHandler(fail);
+        call[fnName].apply(call, args.concat([overwrite]));
+      }
+      run(false);
+    }
+
+    function renderStops() {
+      var list = $('list'); list.textContent = '';
+      if (!state.stops.length) list.appendChild(el('li', 'stop', 'No stops yet. Run the import below, or add stops on the Transport_Stops tab.'));
+      state.stops.forEach(function (s) {
+        var li = el('li', 'stop');
+        var r = el('div', 'row1');
+        r.appendChild(el('span', 'nm', s.stop_name || s.stop_id));
+        r.appendChild(s.unverified ? el('span', 'badge unver', '⚠ Unverified') : el('span', 'badge ver', '✓ Verified ' + s.verified_on));
+        li.appendChild(r);
+        var bits = [s.stop_id];
+        if (s.landmark) bits.push(s.landmark);
+        bits.push(s.lat === null ? 'no position yet' : s.coord_source ? 'position from ' + s.coord_source.replace('_', ' ') : 'position set');
+        li.appendChild(el('div', 'why', bits.join('  |  ')));
+        var mark = el('button', 'big', 'Mark this stop'); mark.type = 'button';
+        mark.addEventListener('click', function () {
+          if (!vehicle()) { setBanner('red', 'Choose the bus first.'); return; }
+          mark.disabled = true;
+          save('gpsMarkStop', [s.stop_id, vehicle()], function (res) {
+            mark.disabled = false;
+            $('posinfo').textContent = 'Position used: as of ' + res.position_as_of_text + ', accurate to ' + res.accuracy_m + ' m.';
+            setBanner('green', '✓ Saved ' + (s.stop_name || s.stop_id) + '.');
+            load();
+          });
+          setTimeout(function () { mark.disabled = false; }, 8000);
+        });
+        li.appendChild(mark);
+        var tap = el('button', 'ghost big', 'Pick on map'); tap.type = 'button';
+        tap.style.minHeight = '44px'; tap.style.fontSize = '16px';
+        tap.addEventListener('click', function () { openPicker(s, null); });
+        li.appendChild(tap);
+        list.appendChild(li);
+      });
+    }
+
+    function ensureMap() {
+      if (map || !window.L) { if (!window.L) $('mapnote').style.display = 'block'; return !!map; }
+      map = L.map('map').setView([11.0, 78.0], 7);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+      map.on('click', function (e) { setPick(e.latlng.lat, e.latlng.lng); });
+      return true;
+    }
+    function setPick(la, lo) {
+      picked = { lat: la, lon: lo };
+      if (map) { if (pin) pin.setLatLng([la, lo]); else pin = L.marker([la, lo]).addTo(map); }
+      $('pkpos').textContent = 'Picked ' + la.toFixed(6) + ', ' + lo.toFixed(6);
+      $('pksave').disabled = false;
+    }
+    // picking = {stop, draftSource|null}. A null source is a normal map tap.
+    function openPicker(stop, draftSource, la, lo) {
+      picking = { stop: stop, draft: draftSource }; picked = null; $('pksave').disabled = true;
+      $('pkpos').textContent = 'Nothing picked yet.';
+      $('pktitle').textContent = (draftSource ? 'Save suggestion for ' : 'Pick a spot for ') + (stop.stop_name || stop.stop_id);
+      $('picker').style.display = 'block';
+      if (ensureMap()) {
+        if (pin) { map.removeLayer(pin); pin = null; }
+        setTimeout(function () {
+          map.invalidateSize();
+          var c = la !== undefined ? [la, lo] : stop.lat !== null ? [stop.lat, stop.lon] : state.school ? [state.school.lat, state.school.lon] : null;
+          if (c) map.setView(c, 17);
+          if (la !== undefined) setPick(la, lo);
+        }, 50);
+      }
+      $('picker').scrollIntoView({ block: 'start' });
+    }
+    function closePicker() { picking = null; picked = null; $('picker').style.display = 'none'; }
+    $('pkcancel').addEventListener('click', closePicker);
+    $('pksave').addEventListener('click', function () {
+      if (!picking || !picked) return;
+      var p = picking, c = picked;
+      var fn = p.draft ? 'gpsSaveDwellDraft' : 'gpsTapStop';
+      var args = p.draft ? [p.stop.stop_id, c.lat, c.lon, p.draft] : [p.stop.stop_id, c.lat, c.lon];
+      save(fn, args, function () {
+        closePicker();
+        setBanner('green', '✓ Saved ' + (p.stop.stop_name || p.stop.stop_id) + (p.draft ? ' as a draft (still unverified).' : '.'));
+        load();
+      });
+    });
+
+    function renderDwell(res) {
+      $('dwellinfo').textContent = (res.down ? 'Tracking service unreachable; showing the last copy. ' : '') +
+        'Data as of ' + (res.data_as_of_text || '--:--') + '. ' + (res.suggestions.length ? res.suggestions.length + ' place(s) found.' : 'No new stopping places found.');
+      var ul = $('dwell'); ul.textContent = '';
+      res.suggestions.forEach(function (s) {
+        var li = el('li', 'sug');
+        li.appendChild(el('div', 'nm', s.time + ', stood ' + s.duration_s + ' s'));
+        li.appendChild(el('div', 'why', s.lat.toFixed(6) + ', ' + s.lon.toFixed(6) + '  |  ' + s.count + ' fixes'));
+        var sel = el('select'); sel.setAttribute('aria-label', 'Stop to save this place to');
+        state.stops.forEach(function (st) {
+          var o = el('option', null, st.stop_name || st.stop_id); o.value = st.stop_id; sel.appendChild(o);
+        });
+        li.appendChild(sel);
+        [['map_tap', 'Save as draft (map tap)'], ['driven', 'Save as draft (driven)']].forEach(function (b) {
+          var btn = el('button', 'ghost big', b[1]); btn.type = 'button';
+          btn.style.minHeight = '44px'; btn.style.fontSize = '16px';
+          btn.addEventListener('click', function () {
+            var stop = state.stops.filter(function (x) { return x.stop_id === sel.value; })[0];
+            if (stop) openPicker(stop, b[0], s.lat, s.lon);
+          });
+          li.appendChild(btn);
+        });
+        ul.appendChild(li);
+      });
+    }
+    $('dwellgo').addEventListener('click', function () {
+      if (!vehicle()) { setBanner('red', 'Choose the bus first.'); return; }
+      $('dwellinfo').textContent = 'Loading track...';
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (!res || res.ok !== true) { $('dwellinfo').textContent = (res && res.error) || 'Not available.'; return; }
+          renderDwell(res);
+        })
+        .withFailureHandler(function () { $('dwellinfo').textContent = 'Could not load the track.'; })
+        .getGpsDwell(vehicle(), '');
+    });
+
+    function renderImport(res) {
+      var d = $('impres'); d.textContent = '';
+      var c = res.counts;
+      d.appendChild(el('div', null, (res.applied ? 'Imported. ' : 'Dry run, nothing written. ') +
+        'New: ' + c.stops_new + ' stops, ' + c.trip_stops_new + ' trip stops, ' + c.student_stops_new + ' student stops. ' +
+        'Already there: ' + c.stops_existing + ', ' + c.trip_stops_existing + ', ' + c.student_stops_existing + '.'));
+      if (res.missing_fields && res.missing_fields.length) {
+        d.appendChild(el('div', 'why', 'Not matched on Stop_Import_Map: ' + res.missing_fields.join(', ') + '.'));
+      }
+      d.appendChild(el('div', null, '⚠ ' + res.unmapped_total + ' row(s) could not be fully used' + (res.unmapped_total > res.unmapped.length ? ' (first ' + res.unmapped.length + ' shown)' : '') + '.'));
+      var ul = el('ul');
+      res.unmapped.forEach(function (u) { ul.appendChild(el('li', null, (u.row ? 'Row ' + u.row + ': ' : '') + u.reason)); });
+      d.appendChild(ul);
+    }
+    function runImport(apply) {
+      if (busy) return; busy = true;
+      $('impres').textContent = apply ? 'Importing...' : 'Checking...';
+      google.script.run
+        .withSuccessHandler(function (res) {
+          busy = false;
+          if (!res || res.ok !== true) { $('impres').textContent = (res && res.error) || 'Not available.'; $('impgo').disabled = true; return; }
+          renderImport(res);
+          $('impgo').disabled = !!apply;
+          if (apply) load();
+        })
+        .withFailureHandler(function () { busy = false; $('impres').textContent = 'Could not reach the server.'; })
+        .gpsImportStops(apply === true);
+    }
+    $('impdry').addEventListener('click', function () { runImport(false); });
+    $('impgo').addEventListener('click', function () {
+      if (window.confirm('Add the new stops, trip stops and student stops to the sheet? Existing rows are not changed.')) runImport(true);
+    });
+
+    function load() {
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (!res || res.ok !== true) {
+            var e = res && res.error ? String(res.error) : '';
+            showMessage(/not set up|record this view/i.test(e) ? e : 'Sign in with your school account. This page is for managers only.');
+            return;
+          }
+          $('progress').style.display = 'none'; $('msg').style.display = 'none'; $('app').style.display = 'block';
+          $('asof').textContent = 'Data as of ' + (res.as_of_text || '--:--');
+          state.stops = res.stops; state.school = res.school;
+          var keep = vehicle(), sel = $('veh'); sel.textContent = '';
+          var o0 = el('option', null, 'Choose the bus'); o0.value = ''; sel.appendChild(o0);
+          res.vehicles.forEach(function (v) { var o = el('option', null, v); o.value = v; sel.appendChild(o); });
+          sel.value = keep || '';
+          $('impdry').disabled = !res.import_configured;
+          if (!res.import_configured) $('impres').textContent = 'The school stop sheet is not set up yet (stop_import_sheet_id in Settings).';
+          renderStops();
+        })
+        .withFailureHandler(function () { showMessage('Could not load the stops. Check your connection and tap Refresh.'); })
+        .getGpsStops();
+    }
+    $('refresh').addEventListener('click', load);
+    load();
+  })();
+  </script>
+</body>
+</html>

@@ -52,6 +52,10 @@ Every GPS server function begins with `gpsRequire_('view')` or `gpsRequire_('man
 - `GPS_Access` is protected so that only the workbook owner can edit it (set by `setupGpsTabs()`, which should be run by the owner).
 - Every view is recorded by `gpsLogAccess_(email, view)` in `GPS_Access_Log` with the signed-in address (R18). Whether a failed log write blocks the view is each caller's choice (G-B); the function returns true or false and never throws.
 
+### G-F amendment: stop tool (manage only)
+
+`?page=gps-stops` and its six server functions (`getGpsStops`, `gpsMarkStop`, `gpsTapStop`, `getGpsDwell`, `gpsSaveDwellDraft`, `gpsImportStops`) need `gpsRequire_('manage')`. A `view` role cannot read stop coordinates or the import report. Saves write an audit row to `GPS_Access_Log` before the sheet changes. No change to the roles or the deployment steps.
+
 ### What the code cannot show
 
 The server-side check is unit-tested with table-driven cases, but **only a real deployment shows that `getActiveUser().getEmail()` returns the viewer's address** under the chosen settings. That is the T26 spike. It has not been run (no Apps Script runtime was available).
