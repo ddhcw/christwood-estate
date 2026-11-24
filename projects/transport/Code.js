@@ -13,6 +13,15 @@ function doGet(e) {
       .addMetaTag('viewport', 'width=device-width, initial-scale=1')
       .setFaviconUrl('https://ssl.gstatic.com/docs/script/images/favicon.png');
   }
+  // ?page=gps-stops serves the stop capture tool (GpsStops.html). Manage role only,
+  // enforced by every server function it calls (G-F).
+  if (e && e.parameter && e.parameter.page === 'gps-stops') {
+    return HtmlService.createTemplateFromFile('GpsStops')
+      .evaluate()
+      .setTitle('Bus stops')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setFaviconUrl('https://ssl.gstatic.com/docs/script/images/favicon.png');
+  }
   const t = HtmlService.createTemplateFromFile('Index');
   t.presetVehicle = (e && e.parameter && e.parameter.v) ? String(e.parameter.v) : '';
   return t

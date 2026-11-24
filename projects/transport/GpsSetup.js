@@ -28,7 +28,8 @@ const GPS_SHEETS = {
   STRINGS:       'Notify_Strings',
   DAILY:         'GPS_Daily',
   ACCESS_LOG:    'GPS_Access_Log',
-  ACCESS:        'GPS_Access'
+  ACCESS:        'GPS_Access',
+  IMPORT_MAP:    'Stop_Import_Map'
 };
 
 const GPS_SETTINGS_TAB = 'Settings';
@@ -58,13 +59,21 @@ const GPS_HEADERS = {
     'trip_code', 'session', 'events_fired', 'events_suppressed', 'median_eta_error_min',
     'median_gcm_latency_s'],
   [GPS_SHEETS.ACCESS_LOG]: ['timestamp', 'view', 'viewer_email'],
-  [GPS_SHEETS.ACCESS]: ['email', 'name', 'role', 'active', 'added_by', 'added_on', 'notes']
+  [GPS_SHEETS.ACCESS]: ['email', 'name', 'role', 'active', 'added_by', 'added_on', 'notes'],
+  // G-F (R30): maps the school's stop sheet headers (unknown, Q12) to logical fields.
+  // Editable data. source_header = the exact header; aliases = other names, separated by | .
+  [GPS_SHEETS.IMPORT_MAP]: ['logical_field', 'source_header', 'aliases', 'notes']
 };
+
+// The logical fields the stop import understands, in display order.
+const GPS_IMPORT_FIELDS = ['stop_name', 'landmark', 'route_no', 'session', 'sequence',
+  'scheduled_time', 'admission_no', 'student_stop'];
 
 // Creation order (also the order tabs are added in).
 const GPS_TAB_ORDER = [GPS_SHEETS.DEVICES, GPS_SHEETS.TRIPS, GPS_SHEETS.STOPS,
   GPS_SHEETS.TRIP_STOPS, GPS_SHEETS.STUDENT_STOPS, GPS_SHEETS.NOTIFY_LOG,
-  GPS_SHEETS.STRINGS, GPS_SHEETS.DAILY, GPS_SHEETS.ACCESS_LOG, GPS_SHEETS.ACCESS];
+  GPS_SHEETS.STRINGS, GPS_SHEETS.DAILY, GPS_SHEETS.ACCESS_LOG, GPS_SHEETS.ACCESS,
+  GPS_SHEETS.IMPORT_MAP];
 
 const GPS_SESSIONS = ['MORNING_PICKUP', 'AFTERNOON_DROP', 'EVENING_DROP'];
 
@@ -152,7 +161,9 @@ const GPS_DEFAULT_SETTINGS = [
   ['eta_road_factor', '1.3', 'Multiplier on straight-line distance to approximate road distance'],
   ['eta_speed_window_min', '5', 'Minutes of recent fixes used to estimate speed'],
   ['gps_backfill_bucket', '400', 'Worker burst allowance so a dead-zone backfill is not dropped'],
-  ['gcm_feed_daily_cap', '300', 'Most rows the feeder may add to GCM OUTBOX in a day']
+  ['gcm_feed_daily_cap', '300', 'Most rows the feeder may add to GCM OUTBOX in a day'],
+  ['stop_import_sheet_id', '', 'TODO(human): ID of the school stop sheet for the one-time stop import (R30). Blank = import is off. Map its headers on Stop_Import_Map'],
+  ['stop_import_sheet_tab', '', 'Tab of that sheet to read. Blank = the first tab']
 ];
 
 // ---- 2. Pure logic ---------------------------------------------------------
@@ -364,6 +375,7 @@ function setupGpsTabs_(ss) {
     gpsEnsureHeader_(sh, GPS_HEADERS[name]);
   });
   gpsSeedSettings_(ss);
+  gpsSeedImportMap_(ss);
   GPS_TAB_ORDER.forEach(function (name) {
     var sh = ss.getSheetByName(name);
     var cols = gpsHeaderMap_(sh);
@@ -430,6 +442,30 @@ function gpsSeedSettings_(ss) {
   if (over > 0) sh.insertRowsAfter(sh.getMaxRows(), over);
   sh.getRange(start, 1, rows.length, width).setValues(rows);
   sh.getRange(start, kc, rows.length, 1).setFontWeight('bold');
+}
+
+/** Stop_Import_Map: one row per logical field, added only if missing. Never edits a row a person filled in. */
+function gpsSeedImportMap_(ss) {
+  var sh = ss.getSheetByName(GPS_SHEETS.IMPORT_MAP);
+  var cols = gpsHeaderMap_(sh);
+  var fc = cols['logical_field'];
+  if (!fc) throw new Error('Stop_Import_Map has no "logical_field" header');
+  var last = sh.getLastRow();
+  var have = {};
+  if (last > 1) sh.getRange(2, fc, last - 1, 1).getValues().forEach(function (r) { var k = gpsStr_(r[0]); if (k) have[k] = true; });
+  var missing = GPS_IMPORT_FIELDS.filter(function (f) { return !have[f]; });
+  if (!missing.length) return;
+  var width = sh.getLastColumn();
+  var rows = missing.map(function (f) {
+    var r = new Array(width).fill('');
+    r[fc - 1] = f;
+    if (cols['notes']) r[cols['notes'] - 1] = 'Fill source_header with the exact header in the school sheet (Q12)';
+    return r;
+  });
+  var start = last + 1;
+  var over = start + rows.length - 1 - sh.getMaxRows();
+  if (over > 0) sh.insertRowsAfter(sh.getMaxRows(), over);
+  sh.getRange(start, 1, rows.length, width).setValues(rows);
 }
 
 function gpsApplyListRules_(sh, tabName, cols) {

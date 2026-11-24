@@ -65,6 +65,7 @@ function makeSpreadsheet() {
     sheets,
     getSheetByName: (n) => sheets[n] || null,
     insertSheet(n) { sheets[n] = makeSheet(n); return sheets[n]; },
+    getSheets: () => Object.keys(sheets).map((k) => sheets[k]),
     getOwner: () => ({ getEmail: () => 'owner@x.test' })
   };
 }
@@ -96,6 +97,7 @@ function loadGas(files, opts) {
       newTrigger: (fn) => { const t = { fn, getHandlerFunction: () => fn }; const b = { timeBased() { return b; }, everyMinutes(n) { t.minutes = n; return b; }, create() { state.triggers.push(t); return t; } }; return b; } },
     SpreadsheetApp: {
       getActiveSpreadsheet: () => ss,
+      openById: (id) => { const x = (opts.sources || {})[id]; if (!x) throw new Error('no such sheet'); return x; },
       newDataValidation: ruleBuilder, newConditionalFormatRule: ruleBuilder,
       ProtectionType: { RANGE: 'RANGE' },
       flush: () => { state.flushes = (state.flushes || 0) + 1; },
@@ -122,7 +124,7 @@ function loadGas(files, opts) {
       const r = state.fetchHandler(url, o);
       return { getResponseCode: () => r.status, getContentText: () => (typeof r.body === 'string' ? r.body : JSON.stringify(r.body)) };
     } },
-    HtmlService: { createTemplateFromFile: (name) => { const t = { name, evaluate: () => ({ setWidth() { return this; }, setHeight() { return this; } }) }; state.templates.push(t); return t; } }
+    HtmlService: { createTemplateFromFile: (name) => { const t = { name, evaluate: () => ({ setWidth() { return this; }, setHeight() { return this; }, setTitle() { return this; }, addMetaTag() { return this; }, setFaviconUrl() { return this; } }) }; state.templates.push(t); return t; } }
   };
   vm.createContext(sandbox);
   files.forEach((f) => vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), sandbox, { filename: f }));
